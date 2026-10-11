@@ -17,7 +17,7 @@ No part of this requires installing Python, Node.js, Docker or a terminal.
 ## 2. Create the Worker from the repository (Cloudflare)
 
 1. Cloudflare dashboard → **Workers & Pages → Create → Import a repository** (Workers Builds). Authorise the Cloudflare GitHub app for the private repository only.
-2. Project name: **`nodi-ads`** (it must equal the `name` in `wrangler.jsonc`, or the build fails). Leave the build command empty and the deploy command at its default (`npx wrangler deploy`). Save and deploy.
+2. Project name: **`nodi-ads-cloudflare`** (it must equal the `name` in `wrangler.jsonc`, or the build fails). Leave the build command empty and the deploy command at its default (`npx wrangler deploy`). Save and deploy.
 3. The first deploy creates the D1 database `nodi-ads-db` automatically (current Wrangler does this when `database_id` is omitted). **If the build reports a D1 error**: Cloudflare dashboard → *Storage & databases → D1 → Create database* named `nodi-ads-db`, copy its ID, edit `wrangler.jsonc` on GitHub (pencil icon) and add `"database_id": "<the id>"` to the `d1_databases` entry. Commit; it redeploys.
 4. Your Worker URL is `https://nodi-ads.<your-subdomain>.workers.dev`. Open `https://…/healthz`; it should answer `{"ok":true,…}`.
 
@@ -79,7 +79,7 @@ Start with `read` + `draft` permissions. Add `apply` only when you want the AI t
 
 | Symptom | Cause / fix |
 |---|---|
-| Build fails mentioning the Worker name | Worker name in Cloudflare must be `nodi-ads` |
+| Build fails mentioning the Worker name | Worker name in Cloudflare must be `nodi-ads-cloudflare` |
 | Build fails on D1 | add `database_id` (step 2.3) |
 | Dashboard says "ADMIN_SETUP_SECRET is not set" | add the secret, then reload |
 | Google says `redirect_uri_mismatch` | the URI in Google Cloud differs from the one on the *Google connection* page by even one character |
