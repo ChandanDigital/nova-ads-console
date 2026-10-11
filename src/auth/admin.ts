@@ -129,6 +129,7 @@ const verifySetupSecret = async (ctx: Ctx, provided: unknown): Promise<string> =
   const configured = requireSetupSecretConfigured(ctx.env.ADMIN_SETUP_SECRET).trim(); const typed = typeof provided === "string" ? provided.trim() : "";
   if (!(await timingSafeEqual(typed, configured))) {
     await audit(ctx.db, { actor_type: "anonymous", action: "setup_secret_rejected", outcome: "denied", ip_hash: ctx.ipHash });
+    // Length hint only (never the value) so a mistyped or stale Cloudflare secret can be diagnosed without exposing it.
     throw new NodiError("invalid_setup_secret", `That setup secret is not correct (the secret saved in Cloudflare is ${configured.length === typed.length ? "the same length as" : configured.length > typed.length ? "longer than" : "shorter than"} what you typed).`, 403);
   }
   const digest = await sha256Hex("setup-secret:" + configured);
