@@ -21,15 +21,18 @@ Legend: **Preserved** = same behaviour and rules, same tool name · **Reimplemen
 | search, get_resource_metadata, list_accessible_customers | **New** | compatible with the official `googleads/google-ads-mcp` tool names and arguments (reimplemented, **not** the Python package) |
 | create_budget_change_plan, create_status_change_plan | **New** | friendlier wrappers for the most common changes |
 | get_hosting_usage | **New** | free-tier usage |
-| duplicate_search_campaign_plan, create_experiment_plan, forecast_keywords | Not ported | still in the local plugin |
-| configure_monitor, pause_monitor, get_notifications | **Not available on free hosting** | needs always-on scheduled work beyond 10 ms CPU |
-| inspect_landing_page | Not ported | needs HTML parsing beyond the CPU budget; SSRF guard would need re-implementing |
+| create_duplicate_campaign_plan | **Reimplemented** | Search campaigns only; drafts a NEW paused copy through the normal plan and approval path and lists what was not copied (sitelinks, callouts, schedules, devices, radius targets, AI Max, shared lists, extra ads) |
+| create_experiment_plan, forecast_keywords | Not ported | still in the local plugin |
+| get_alerts, daily monitor | **Reimplemented as alerts only** | a daily read-only check raises alerts (spend with no conversions, disapproved ads, unreadable accounts); shown on the dashboard overview and through `get_alerts`. Nothing is paused automatically |
+| configure_monitor, pause_monitor | **Not available on free hosting** | custom thresholds per monitor and always-on checks need more than the 10 ms CPU budget |
+| inspect_landing_page | **Reimplemented (lightweight)** | one public https fetch with an SSRF guard (https only, no private/IP hosts, redirects re-checked, 100 KB cap); title, meta description, H1, mobile tag, noindex, forms, tel links and basic checks. No JavaScript rendering, speed test or tracking check |
 | get_measurement_data (GA4/GTM/Merchant) | Not ported | local plugin |
 | import_google_csv, audit_imported_snapshot | Not ported | local plugin |
-| execute_authorised_upload, get_upload_status (customer match / conversion uploads) | Not ported by design | private customer data is not stored on the free cloud database |
+| execute_authorised_upload, get_upload_status (customer match / conversion uploads) | Not ported by design | private customer data (click IDs, hashed emails and phone numbers) is not stored on the free cloud database; Google also states that new conversion-import features go to the Data Manager API rather than the Google Ads API upload services |
 | submit_audit_findings | Not ported | specialist-agent worker merge; agents keep working through the plugin |
 | Display / Shopping / Performance Max / Demand Gen / App creation | **Reimplemented** | `create_campaign_plan` with `campaign_type`; paused by default; needs existing image/video assets (no upload), linked Merchant feed / app listing; General Video creation is not supported by the Google Ads API |
-| Recommendation apply / dismiss | Not ported | reading works |
+| Recommendation apply / dismiss | **Reimplemented** | `create_recommendation_plan`; human approval with its own permission classes; Google has no validate-only mode for this call, so validation re-checks that each recommendation is still open; budget recommendations are refused (use the budget plan) |
+| PDF reports | **Partly** | dashboard "Print / Save as PDF" button on plans and audits (browser print); no server-generated PDF |
 | Standing permissions (auto-pause) | Not ported | would defeat "every mutation needs explicit human approval" |
 
 ## Platform features
