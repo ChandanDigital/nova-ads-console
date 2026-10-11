@@ -206,6 +206,25 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    // Read-only health alerts raised by the daily monitor (see src/ads/monitor.ts). Additive: existing data is untouched.
+    id: "0002_alerts",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS alerts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dedupe_key TEXT NOT NULL UNIQUE,
+        account_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        severity TEXT NOT NULL,
+        title TEXT NOT NULL,
+        detail TEXT NOT NULL,
+        first_seen INTEGER NOT NULL,
+        last_seen INTEGER NOT NULL,
+        resolved_at INTEGER
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_alerts_open ON alerts(resolved_at, severity)`,
+    ],
+  },
 ];
 
 /** Statements that would modify or destroy existing data. Migrations may never contain them. */
