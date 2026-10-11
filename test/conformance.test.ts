@@ -40,6 +40,7 @@ describe(`mutate payloads conform to Google's v25 REST schema (revision ${schema
 
   it("updates: every allowed field path exists on the real resource", () => {
     for (const [kind, info] of Object.entries(KINDS)) {
+      if (kind === "recommendation") continue; // applied through RecommendationService, not a mutate operation
       const schema = resourceSchema(info.op);
       for (const path of info.updatable) expect(pathExists(schema, path), `${kind}.${path}`).toBe(true);
     }
