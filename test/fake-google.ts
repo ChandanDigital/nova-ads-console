@@ -167,7 +167,7 @@ export class FakeGoogle {
       const resultKey = opKey.replace(/Operation$/, "Result");
       if (op.create) {
         const rn0 = op.create.resourceName as string | undefined;
-        const coll = rn0 ? rn0.split("/")[2]! : { campaignAssetOperation: "campaignAssets", adGroupCriterionOperation: "adGroupCriteria", adGroupAdOperation: "adGroupAds", campaignCriterionOperation: "campaignCriteria" }[opKey]!;
+        const coll = rn0 ? rn0.split("/")[2]! : { campaignAssetOperation: "campaignAssets", assetGroupAssetOperation: "assetGroupAssets", adGroupCriterionOperation: "adGroupCriteria", adGroupAdOperation: "adGroupAds", campaignCriterionOperation: "campaignCriteria" }[opKey]!;
         const id = ++this.nextId;
         const rn = `customers/${cid}/${coll}/${id}`;
         if (rn0) temps.set(rn0, rn);
