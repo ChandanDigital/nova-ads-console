@@ -8,13 +8,13 @@ Environment: Windows 11, Node 22.23.2, Wrangler 4.149.0 (local workerd runtime),
 
 | Suite | Command | Result |
 |---|---|---|
-| Worker, in the Workers runtime | `npx vitest run` | **14 files, 231 tests, 0 failed** |
-| Dashboard logic (DOM) | `npx vitest run -c vitest.ui.config.ts` | **1 file, 11 tests, 0 failed** |
+| Worker, in the Workers runtime | `npx vitest run` | **18 files, 278 tests, 0 failed** |
+| Dashboard logic (DOM) | `npx vitest run -c vitest.ui.config.ts` | **1 file, 14 tests, 0 failed** |
 | Type check (strict) | `npm run typecheck` | no errors |
 | Python plugin (original 148 + 8 new) | `pytest tests` | **156 passed** |
 | Clean install | `npm ci` from the lock file in an empty folder, then typecheck + tests | passed |
 | Dependency audit | `npm audit` (including dev dependencies) | 0 vulnerabilities |
-| Deployment bundle | `wrangler deploy --dry-run` | bundles; 1712 KiB, 307 KiB gzipped; bindings DB + ASSETS |
+| Deployment bundle | `wrangler deploy --dry-run` | bundles; 1749 KiB, 317 KiB gzipped; bindings DB + ASSETS |
 | Migration SQL in sync with source | `npm run gen:migration` then diff | identical |
 
 ## Worker tests by file
@@ -23,6 +23,10 @@ Environment: Windows 11, Node 22.23.2, Wrangler 4.149.0 (local workerd runtime),
 |---|---:|---|
 | `admin.test.ts` | 23 | first-time setup needs the Cloudflare-held secret; wrong/missing secret refused; credential stored only as a hash; login, logout, rate limiting; HttpOnly+Secure+SameSite cookie; CSRF header and same-origin checks on every mutation; bearer tokens never work on dashboard routes; **credential replacement**: used secret refused, new secret works once, old credential and sessions die, AI tokens revoked, plans/approvals preserved, unreachable with an AI token, guessing is rate-limited, confirmation phrase required |
 | `asset-campaigns.test.ts` | 30 | Display, Shopping, Performance Max, Demand Gen and App-install payloads all validate against Google's v25 REST schema; paused by default; right channel types; a full Performance Max asset group; 15 missing/invalid-input refusals; each type through the MCP tool, human approval and execution; Search still works with `campaign_type` omitted or `SEARCH` |
+| `recommendations.test.ts` | 10 | apply and dismiss go through plan, re-check, human approval and ONE all-or-nothing Google call; no mutate call is made; own permission classes; budget recommendations refused; stale/unknown/dismissed refused; Google accepting but changing nothing is `outcome_unknown`, then reconciled; Google errors are not retried; global stop; no recovery plan; shape rules |
+| `duplicate.test.ts` | 9 | a Search campaign becomes a new paused plan (bids, locations, exclusions, negatives, ad groups, keywords, first enabled ad), skipped parts are reported, the source is never written, validation + approval + execution, target CPA/ROAS, refusals (non-Search, unsupported bidding, missing EU declaration, too large, nothing to copy, insecure URL), draft permission |
+| `landing.test.ts` | 22 | page facts extracted, redirects followed and re-validated, 100 KB cap, hostile text clipped, scripts ignored, private/IP/local/http/port/credential URLs refused before any request (including redirect targets), unreachable pages, MCP tool with a read-only token |
+| `monitor.test.ts` | 6 | alerts for spend with no conversions and disapproved ads; deduplicated and auto-resolved; configurable threshold (admin only); unreadable account becomes an info alert; AI callers only see allowed accounts; daily cron runs it and survives its failure; no write ever reaches Google |
 | `crypto.test.ts` | 9 | AES-GCM round trip, fresh IV, row binding (AAD), tamper detection, changed/rotated/invalid key messages, canonical hashing |
 | `migrations.test.ts` | 5 | no destructive SQL, all `IF NOT EXISTS`, idempotent, an upgrade keeps existing rows |
 | `google.test.ts` | 11 | consent URL (PKCE S256, offline, only Ads scope, secrets not exposed), server-side exchange, sealed token storage, manager-child discovery with `login-customer-id`, **no developer-token header**, single-use state, state bound to the browser session, missing refresh token / scope refused, refresh and caching, `invalid_grant` handling with guidance, disconnect revokes and wipes |
@@ -36,7 +40,7 @@ Environment: Windows 11, Node 22.23.2, Wrangler 4.149.0 (local workerd runtime),
 | `github-only.test.ts` | 3 | the GitHub Actions report is read-only (three reads, never a mutate), explains expired tokens and missing secrets |
 | `ui.test.ts` | 4 | dashboard files comply with the strict CSP (no inline script/style, no third-party URLs, no `innerHTML`/`eval`); the secret generator makes no network call |
 
-Dashboard DOM tests (`test-ui/views.test.ts`, 11): the approval screen shows exact before/after values and posts hash + only the ticked permissions + typed word + CSRF token; no approve button unless the plan awaits approval; hostile text from Google/AI renders as text (no element is created, no script runs); account switches; consent screen submits only the scopes/accounts left ticked; token creation shows the secret once; setup shows the credential once and enforces the "saved" box; login errors surface.
+Dashboard DOM tests (`test-ui/views.test.ts`, 14; the new ones cover the recommendation action wording, the CSP-safe print button and the alerts card, with hostile alert text rendered as text): the approval screen shows exact before/after values and posts hash + only the ticked permissions + typed word + CSRF token; no approve button unless the plan awaits approval; hostile text from Google/AI renders as text (no element is created, no script runs); account switches; consent screen submits only the scopes/accounts left ticked; token creation shows the secret once; setup shows the credential once and enforces the "saved" box; login errors surface.
 
 ## Python (plugin) tests
 
