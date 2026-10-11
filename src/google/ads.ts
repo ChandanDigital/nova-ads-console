@@ -167,6 +167,11 @@ export class AdsClient {
     );
   }
 
+  /** RecommendationService apply/dismiss. All-or-nothing; never retried (Google has no validate-only mode here). */
+  async recommendations(customerId: string, action: "apply" | "dismiss", resourceNames: string[]): Promise<{ results?: Record<string, any>[] }> {
+    return this.call("POST", `customers/${customerId}/recommendations:${action}`, { operations: resourceNames.map((resourceName) => ({ resourceName })), partialFailure: false }, { mutating: true });
+  }
+
   /** Generic POST for non-GAQL methods (keyword ideas, geo suggestions, field metadata). */
   async post<T>(path: string, body: unknown, opts: { loginCustomerId?: string | null } = {}): Promise<T> {
     return this.call<T>("POST", path, body, opts);
