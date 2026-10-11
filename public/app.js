@@ -3,6 +3,8 @@ import { viewLogin, viewRecover, viewSetup } from "/views-auth.js";
 import { viewAccounts, viewActivity, viewAi, viewApprovals, viewConnections, viewConsent, viewDiagnostics, viewHosting, viewOverview, viewPerformance, viewSecurity } from "/views-main.js";
 
 const root = document.getElementById("root");
+// CSP forbids inline handlers, so printing is wired once here for every [data-print] button.
+document.addEventListener("click", (e) => { if (e.target instanceof Element && e.target.closest("[data-print]")) window.print(); });
 
 const NAV = [
   ["overview", "nav_overview", "M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10"],
