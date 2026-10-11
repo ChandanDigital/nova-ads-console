@@ -34,6 +34,30 @@ describe("first-time setup", () => {
   });
 });
 
+describe("setup secret tolerance and diagnostics", () => {
+  it("ignores accidental spaces or line breaks around the typed secret", async () => {
+    const r = await call("/api/auth/setup", { method: "POST", body: { setup_secret: "  " + SETUP_SECRET + "\n" } });
+    expect(r.status).toBe(201);
+  });
+  it("tolerates a secret saved in Cloudflare with a trailing newline", async () => {
+    const r = await callWithEnv({ ADMIN_SETUP_SECRET: SETUP_SECRET + "\n" },"/api/auth/setup", { method: "POST", body: { setup_secret: SETUP_SECRET } });
+    expect(r.status).toBe(201);
+  });
+  it("says whether the saved secret is shorter, longer or the same length, without revealing it", async () => {
+    const shorter = await call("/api/auth/setup", { method: "POST", body: { setup_secret: SETUP_SECRET + "xyz" } });
+    expect(shorter.status).toBe(403);
+    expect(shorter.json.error.message).toContain("shorter than what you typed");
+    const longer = await call("/api/auth/setup", { method: "POST", body: { setup_secret: "short" } });
+    expect(longer.json.error.message).toContain("longer than what you typed");
+    const same = await call("/api/auth/setup", { method: "POST", body: { setup_secret: SETUP_SECRET.replace(/.$/, "#") } });
+    expect(same.json.error.message).toContain("the same length as what you typed");
+    for (const r of [shorter, longer, same]) {
+      expect(r.text).not.toContain(SETUP_SECRET);
+      expect(r.text).not.toMatch(/\d{2} characters/);
+    }
+  });
+});
+
 describe("login, sessions and CSRF", () => {
   it("signs in with the credential and rejects others", async () => {
     const s = await setupAdmin();
