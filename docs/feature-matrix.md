@@ -28,7 +28,7 @@ Legend: **Preserved** = same behaviour and rules, same tool name · **Reimplemen
 | import_google_csv, audit_imported_snapshot | Not ported | local plugin |
 | execute_authorised_upload, get_upload_status (customer match / conversion uploads) | Not ported by design | private customer data is not stored on the free cloud database |
 | submit_audit_findings | Not ported | specialist-agent worker merge; agents keep working through the plugin |
-| Display / Shopping / Performance Max / Demand Gen / App creation | Not ported | reading them works through GAQL |
+| Display / Shopping / Performance Max / Demand Gen / App creation | **Reimplemented** | `create_campaign_plan` with `campaign_type`; paused by default; needs existing image/video assets (no upload), linked Merchant feed / app listing; General Video creation is not supported by the Google Ads API |
 | Recommendation apply / dismiss | Not ported | reading works |
 | Standing permissions (auto-pause) | Not ported | would defeat "every mutation needs explicit human approval" |
 
