@@ -11,6 +11,7 @@ import { CORS, authServerMetadata, authorize, protectedResourceMetadata, purgeOA
 import { handleApi, googleCallback } from "./api/routes";
 import { handleMcp } from "./mcp/server";
 import { getAccessToken } from "./google/oauth";
+import { runMonitors } from "./ads/monitor";
 
 const wellKnown = (ctx: Ctx): Response | null => {
   const p = ctx.url.pathname;
@@ -116,6 +117,12 @@ export default {
       } catch {
         /* getAccessToken records the failure on the connection; the dashboard shows it */
       }
+    }
+    // Read-only health alerts. A failure here must never stop the maintenance above.
+    try {
+      await runMonitors(ctx);
+    } catch (e) {
+      console.error("monitor failed", e instanceof Error ? e.message : String(e));
     }
     await setSetting(db, "last_cron_at", String(t));
   },
