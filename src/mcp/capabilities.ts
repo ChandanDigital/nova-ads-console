@@ -28,7 +28,7 @@ export const capabilityList = (): Capability[] => {
     c("human_approval", "implemented", "separate authenticated dashboard screen; no MCP tool or token scope can approve"),
     c("recovery_plans", "implemented", "new reviewed plan restoring previous values or pausing created resources"),
     c("remote_https_mcp", "implemented", "Streamable HTTP at /mcp on Cloudflare Workers; OAuth 2.1 + PKCE or pasted API token"),
-    c("display_shopping_pmax_demandgen_app_creation", "not_ported", "Available in the local Python backend (v0.2.0)", "Read access to these campaign types works through GAQL; creation was not ported."),
+    c("display_shopping_pmax_demandgen_app_creation", "implemented", "mutate: responsive Display, Standard Shopping, Performance Max (non-retail), Demand Gen (multi-asset), App installs; paused by default", "Needs an eligible account, existing image/video assets (no file upload), a linked Merchant feed or app listing. General Video campaign creation is not supported by the API."),
     c("search_duplication_and_experiments", "not_ported", "Available in the local Python backend (v0.2.0)"),
     c("recommendations_apply_dismiss", "not_ported", "Reading works (list_recommendations); apply/dismiss were not ported"),
     c("customer_match_and_conversion_uploads", "not_ported", "Data Manager uploads stay in the local Python backend", "Private customer data is deliberately not stored on the free cloud database."),
