@@ -15,6 +15,7 @@ export const TEXT = {
     recoverTitle: "Replace a lost credential", recoverIntro: "Only the Cloudflare account owner can do this. In Cloudflare set ADMIN_SETUP_SECRET to a NEW random value (each value works once), then enter it here. The old credential and all sessions stop working. Nothing is decrypted or reversed.",
     recoverRevoke: "Also revoke all AI tokens and OAuth connections (recommended)", recoverConfirm: "Type REPLACE CREDENTIAL to confirm", recoverButton: "Replace credential", back: "Back",
     ov_title: "Overview", ov_checklist: "Setup checklist", ov_pending: "Plans waiting for approval", ov_activity: "Recent activity", ov_usage: "Free-plan usage today",
+    ov_alerts: "Alerts", ov_alertsNone: "No open alerts.", ov_alertsRun: "Check now", ov_alertsHelp: "Raised by a daily read-only check. Nothing is paused or changed automatically.", print: "Print / Save as PDF",
     ov_globalStop: "Global stop", ov_globalStopHelp: "Blocks every account write immediately, even approved plans.",
     step_secrets: "Cloudflare secrets are set and valid", step_google: "Google Ads is connected", step_accounts: "At least one account is allowed for AI", step_ai: "An AI app is connected (token or OAuth)",
     open: "Open", none_pending: "Nothing is waiting for approval.",
