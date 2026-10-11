@@ -10,7 +10,7 @@ if (!res.ok) throw new Error("discovery download failed: " + res.status);
 const doc = await res.json();
 const schemas = doc.schemas;
 
-const opKeys = ["campaignBudgetOperation", "campaignOperation", "adGroupOperation", "adGroupCriterionOperation", "adGroupAdOperation", "campaignCriterionOperation", "assetOperation", "campaignAssetOperation"];
+const opKeys = ["campaignBudgetOperation", "campaignOperation", "adGroupOperation", "adGroupCriterionOperation", "adGroupAdOperation", "campaignCriterionOperation", "assetOperation", "campaignAssetOperation", "assetGroupOperation", "assetGroupAssetOperation"];
 const mutateOp = schemas[Object.keys(schemas).find((k) => k.endsWith("__MutateOperation"))];
 const keep = {};
 const queue = [];
