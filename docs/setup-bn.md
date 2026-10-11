@@ -34,7 +34,7 @@
 
 1. Cloudflare ড্যাশবোর্ড → **Workers & Pages** → **Create** → **Import a repository** (Workers Builds)।
 2. GitHub অ্যাকাউন্ট যুক্ত করুন; Cloudflare GitHub অ্যাপকে **শুধু `nodi-ads-cloud` রিপোজিটরির** অনুমতি দিন।
-3. রিপোজিটরি বেছে নিন। **Project name** অবশ্যই লিখুন: **`nodi-ads`** (এর সঙ্গে `wrangler.jsonc`-এর নাম হুবহু মিলতে হবে)। Build command ফাঁকা রাখুন; Deploy command যেমন আছে তেমনই থাকুক (`npx wrangler deploy`)। **Save and Deploy** চাপুন।
+3. রিপোজিটরি বেছে নিন। **Project name** অবশ্যই লিখুন: **`nodi-ads-cloudflare`** (এর সঙ্গে `wrangler.jsonc`-এর নাম হুবহু মিলতে হবে)। Build command ফাঁকা রাখুন; Deploy command যেমন আছে তেমনই থাকুক (`npx wrangler deploy`)। **Save and Deploy** চাপুন।
 4. সফল হলে আপনার ঠিকানা হবে `https://nodi-ads.<আপনার-সাবডোমেইন>.workers.dev`। ব্রাউজারে `…/healthz` খুললে `{"ok":true,…}` দেখা উচিত।
 
 **যদি বিল্ড D1 ডাটাবেস নিয়ে ভুল দেখায়:** Cloudflare → **Storage & databases → D1 → Create database** → নাম `nodi-ads-db` → তৈরির পর **Database ID** কপি করুন। GitHub-এ `wrangler.jsonc` খুলে পেন্সিল চাপুন এবং `d1_databases` অংশে `"database_id": "<কপি করা আইডি>"` যোগ করে Commit করুন। এরপর নিজে থেকেই আবার ডিপ্লয় হবে।
@@ -44,7 +44,7 @@
 ## ধাপ ৩ — গোপন মান (Secrets) যোগ করুন
 
 1. ব্রাউজারে `https://nodi-ads.<…>.workers.dev/generate-secrets.html` খুলুন। এই পাতা দুটি র‍্যান্ডম মান **আপনার ব্রাউজারের ভেতরেই** বানায়; কিছুই কোথাও পাঠানো বা সংরক্ষণ হয় না।
-2. Cloudflare → আপনার Worker (`nodi-ads`) → **Settings → Variables and Secrets → Add**। ধরন (Type) বেছে নিন **Secret**। চারটি যোগ করুন:
+2. Cloudflare → আপনার Worker (`nodi-ads-cloudflare`) → **Settings → Variables and Secrets → Add**। ধরন (Type) বেছে নিন **Secret**। চারটি যোগ করুন:
 
 | নাম | মান |
 |---|---|
@@ -105,7 +105,7 @@
 
 | লক্ষণ | কারণ / সমাধান |
 |---|---|
-| বিল্ড Worker-এর নাম নিয়ে ভুল দেখায় | Cloudflare-এ নাম অবশ্যই `nodi-ads` |
+| বিল্ড Worker-এর নাম নিয়ে ভুল দেখায় | Cloudflare-এ নাম অবশ্যই `nodi-ads-cloudflare` |
 | বিল্ড D1 নিয়ে ভুল দেখায় | ধাপ ২-এর D1 অংশ দেখুন (`database_id` দিন) |
 | `redirect_uri_mismatch` | Google Cloud-এর URI ও ড্যাশবোর্ডে দেখানো URI এক অক্ষরও আলাদা |
 | প্রায় এক সপ্তাহ পর `credentials_expired` | অ্যাপ এখনও Testing মোডে; Production-এ প্রকাশ করে আবার Connect করুন |
