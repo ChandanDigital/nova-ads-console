@@ -126,10 +126,10 @@ const verifySetupSecret = async (ctx: Ctx, provided: unknown): Promise<string> =
   if (ctx.request.headers.get("authorization")) throw new NodiError("forbidden", "Recovery is not available to token holders.", 403);
   await rateLimit(ctx, "setup:ip:" + ctx.ipHash, 5, 900);
   await rateLimit(ctx, "setup:global", 20, 900);
-  const configured = requireSetupSecretConfigured(ctx.env.ADMIN_SETUP_SECRET);
-  if (typeof provided !== "string" || !(await timingSafeEqual(provided, configured))) {
+  const configured = requireSetupSecretConfigured(ctx.env.ADMIN_SETUP_SECRET).trim(); const typed = typeof provided === "string" ? provided.trim() : "";
+  if (!(await timingSafeEqual(typed, configured))) {
     await audit(ctx.db, { actor_type: "anonymous", action: "setup_secret_rejected", outcome: "denied", ip_hash: ctx.ipHash });
-    throw new NodiError("invalid_setup_secret", "That setup secret is not correct.", 403);
+    throw new NodiError("invalid_setup_secret", `That setup secret is not correct (the secret saved in Cloudflare is ${configured.length === typed.length ? "the same length as" : configured.length > typed.length ? "longer than" : "shorter than"} what you typed).`, 403);
   }
   const digest = await sha256Hex("setup-secret:" + configured);
   if (await ctx.db.first("SELECT digest FROM used_setup_secrets WHERE digest = ?", digest)) {
