@@ -1,0 +1,7 @@
+# Only the repository owner may change code that handles credentials, approval or deployment.
+# Combine with branch protection on main (require pull request + CODEOWNERS review + passing CI).
+*                       @REPLACE-WITH-YOUR-GITHUB-USERNAME
+/src/auth/              @REPLACE-WITH-YOUR-GITHUB-USERNAME
+/src/ads/execute.ts     @REPLACE-WITH-YOUR-GITHUB-USERNAME
+/wrangler.jsonc         @REPLACE-WITH-YOUR-GITHUB-USERNAME
+/.github/               @REPLACE-WITH-YOUR-GITHUB-USERNAME

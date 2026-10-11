@@ -1,0 +1,50 @@
+import { adsVersion, type Env } from "../env";
+
+export type CapStatus = "implemented" | "partial" | "not_available_on_free_hosting" | "not_ported";
+
+export interface Capability {
+  id: string;
+  status: CapStatus;
+  implementation: string;
+  note?: string;
+  live_verified: false;
+}
+
+/** Honest capability matrix. `live_verified` stays false until someone runs the live checks in docs/live-checks.md. */
+export const capabilityList = (): Capability[] => {
+  const c = (id: string, status: CapStatus, implementation: string, note?: string): Capability => ({ id, status, implementation, note, live_verified: false });
+  return [
+    c("account_discovery", "implemented", "customers:listAccessibleCustomers + GoogleAdsService.search (customer, customer_client)"),
+    c("gaql_reads", "implemented", "GoogleAdsService.search, bounded, read-only; personal-data fields denied"),
+    c("official_mcp_compat", "implemented", "tools search, get_resource_metadata, list_accessible_customers mirror googleads/google-ads-mcp", "Reimplemented in TypeScript over the REST API; the official Python package is not run inside Workers."),
+    c("reporting", "implemented", "performance, keywords, ads, search terms, segments, impression share, conversion diagnostics, period comparison, pacing"),
+    c("audit", "implemented", "evidence rules over live data; unchecked areas listed, no health score"),
+    c("keyword_research", "implemented", "KeywordPlanIdeaService generateKeywordIdeas / generateKeywordHistoricalMetrics"),
+    c("geo_targets", "implemented", "GeoTargetConstantService suggest"),
+    c("search_campaign_creation", "implemented", "GoogleAdsService.mutate: budget, campaign, locations, ad groups, keywords, RSA, sitelinks, callouts. Paused by default."),
+    c("campaign_updates", "implemented", "mutate with exact update masks: status, budget, bids, names, tracking templates"),
+    c("keyword_and_ad_group_updates", "implemented", "mutate: ad group status/bid, keyword status/bid/final URLs, new keywords and negatives (with evidence)"),
+    c("validation", "implemented", "mutate validateOnly=true before approval and again before execution"),
+    c("human_approval", "implemented", "separate authenticated dashboard screen; no MCP tool or token scope can approve"),
+    c("recovery_plans", "implemented", "new reviewed plan restoring previous values or pausing created resources"),
+    c("remote_https_mcp", "implemented", "Streamable HTTP at /mcp on Cloudflare Workers; OAuth 2.1 + PKCE or pasted API token"),
+    c("display_shopping_pmax_demandgen_app_creation", "not_ported", "Available in the local Python backend (v0.2.0)", "Read access to these campaign types works through GAQL; creation was not ported."),
+    c("search_duplication_and_experiments", "not_ported", "Available in the local Python backend (v0.2.0)"),
+    c("recommendations_apply_dismiss", "not_ported", "Reading works (list_recommendations); apply/dismiss were not ported"),
+    c("customer_match_and_conversion_uploads", "not_ported", "Data Manager uploads stay in the local Python backend", "Private customer data is deliberately not stored on the free cloud database."),
+    c("ga4_gtm_merchant_reads", "not_ported", "Local Python backend only"),
+    c("monitors_and_auto_pause", "not_available_on_free_hosting", "Cron triggers are limited to 10 ms CPU on the Free plan", "A daily health check runs; threshold auto-pausing was intentionally not implemented."),
+    c("landing_page_inspection", "not_ported", "Needs HTML parsing beyond the 10 ms Free-plan CPU budget"),
+    c("pdf_reports", "not_available_on_free_hosting", "Not verified in the original either"),
+    c("removal_of_resources", "not_ported", "Disabled by design in the original and here: removal cannot be undone"),
+  ];
+};
+
+export const capabilitySummary = (env: Env) => ({
+  product: "nodi-ads-cloud",
+  version: "0.3.0",
+  release_state: "release candidate; no live Google account verification",
+  api: { transport: "Google Ads REST API", version: adsVersion(env), developer_token: "not required (retired 9 Sep 2026); access follows the OAuth client's Google Cloud project" },
+  capabilities: capabilityList(),
+  health_score: null,
+});
