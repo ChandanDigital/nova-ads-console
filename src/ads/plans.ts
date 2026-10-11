@@ -33,6 +33,8 @@ export const KINDS: Record<string, KindInfo> = {
   asset_group: { op: "assetGroupOperation", coll: "assetGroups", updatable: ["name", "status"] },
   asset_group_asset: { op: "assetGroupAssetOperation", coll: "assetGroupAssets", updatable: [] },
   campaign_asset: { op: "campaignAssetOperation", coll: "campaignAssets", updatable: [] },
+  /** Not a mutate operation: applied or dismissed through RecommendationService (see recommendations.ts). */
+  recommendation: { op: "recommendationOperation", coll: "recommendations", updatable: [] },
 };
 export const KIND_NAMES = Object.keys(KINDS) as [string, ...string[]];
 
@@ -41,7 +43,7 @@ const ENUM_ID_KINDS = new Set(["campaign_asset", "asset_group_asset"]);
 export const resourceValid = (resource: string, account: string, kind: string): void => {
   const info = KINDS[kind];
   if (!info) throw new NodiError("invalid_resource", "Unsupported resource kind.", 400);
-  const tail = ENUM_ID_KINDS.has(kind) ? "[0-9A-Z_~-]+" : "[0-9~-]+";
+  const tail = kind === "recommendation" ? "[0-9A-Za-z_~=.-]+" : ENUM_ID_KINDS.has(kind) ? "[0-9A-Z_~-]+" : "[0-9~-]+";
   if (!new RegExp(`^customers/${account}/${info.coll}/${tail}$`).test(resource)) {
     throw new NodiError("invalid_resource", `Resource ${resource} does not belong to this account or kind ${kind}.`, 400);
   }
@@ -52,7 +54,7 @@ export const PlanOperationSchema = z
   .object({
     id: z.string().regex(/^[a-zA-Z][\w-]{0,63}$/),
     kind: z.enum(KIND_NAMES),
-    action: z.enum(["create", "update"]),
+    action: z.enum(["create", "update", "apply", "dismiss"]),
     payload: z.record(z.string(), z.any()),
     resource_name: z.string().optional(),
     field_mask: z.array(z.string()).default([]),
@@ -109,10 +111,23 @@ export const validatePlanShape = (plan: Plan): void => {
   const seen = new Set<string>();
   const temporary = new Map<string, string>();
   const updated = new Set<string>();
+  if (plan.operations.some((o) => o.kind === "recommendation") && plan.operations.some((o) => o.kind !== "recommendation")) {
+    throw new NodiError("invalid_plan", "Recommendation actions cannot be mixed with other changes in one plan.", 400);
+  }
   for (const op of plan.operations) {
     const info = KINDS[op.kind]!;
     if (op.depends_on.some((d) => !seen.has(d))) throw new NodiError("invalid_plan", `Operation ${op.id}: dependencies must precede it.`, 400);
     if (op.resource_name) resourceValid(op.resource_name, acct, op.kind);
+    if ((op.kind === "recommendation") !== (op.action === "apply" || op.action === "dismiss")) {
+      throw new NodiError("invalid_plan", `Operation ${op.id}: apply and dismiss are only for recommendations.`, 400);
+    }
+    if (op.kind === "recommendation") {
+      if (!op.resource_name || op.field_mask.length || Object.keys(op.before).length || Object.keys(op.payload).length) throw new NodiError("invalid_plan", `Operation ${op.id}: a recommendation action names one recommendation and nothing else.`, 400);
+      if (plan.operations.some((o) => o !== op && o.resource_name === op.resource_name)) throw new NodiError("invalid_plan", "A recommendation can appear once per plan.", 400);
+      if (plan.operations.some((o) => o.action !== op.action)) throw new NodiError("invalid_plan", "Apply and dismiss must be separate plans.", 400);
+      seen.add(op.id);
+      continue;
+    }
     const status = op.payload.status;
     if (status !== undefined && !["ENABLED", "PAUSED"].includes(String(status))) {
       throw new NodiError("invalid_plan", "Only ENABLED or PAUSED statuses are allowed. Removal is disabled because it cannot be undone.", 400);
@@ -187,6 +202,10 @@ export const requiredPermissions = (ops: PlanOperation[]): string[] => {
   const underNew = new Set<string>();
   for (const o of ops) if (o.depends_on.some((d) => created.has(d) || underNew.has(d))) underNew.add(o.id);
   for (const o of ops) {
+    if (o.kind === "recommendation") {
+      perms.add(o.action === "apply" ? "apply_recommendation" : "dismiss_recommendation");
+      continue;
+    }
     const structural = o.action === "create" && (o.kind === "campaign" || o.kind === "campaign_budget");
     if (structural) perms.add("create_campaign");
     else if (o.action === "update" || (!underNew.has(o.id) && !(o.kind === "asset" && created.size > 0))) perms.add("optimisation");
