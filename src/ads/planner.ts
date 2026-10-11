@@ -5,9 +5,10 @@ import { audit } from "../lib/audit";
 import { getSetting } from "../lib/settings";
 import { adsFor, resolveAccount, type AccountRow } from "./accounts";
 import {
-  KINDS, PlanOperationSchema, SearchSpecSchema, camelKeys, camelPath, newPlan, planHash, searchCampaignOperations, rsaValidate, resourceValid,
+  KINDS, PlanOperationSchema, SearchSpecSchema, type SearchSpec, camelKeys, camelPath, newPlan, planHash, searchCampaignOperations, rsaValidate, resourceValid,
   type Plan, type PlanAccount, type PlanOperation,
 } from "./plans";
+import { AssetCampaignSpecSchema, assetCampaignOperations, splitCampaignType, type AssetCampaignSpec } from "./asset-campaigns";
 import { camelToSnake, gaqlString, moneyMicros, pathGet, snakeToCamel } from "../google/gaql";
 import { rowsToObject } from "./util";
 
@@ -97,12 +98,13 @@ export const savePlan = async (ctx: Ctx, p: Principal, plan: Plan, account: Acco
 // --------------------------------------------------------------------------- campaign creation
 export const createCampaignPlan = async (ctx: Ctx, p: Principal, id: string, specInput: unknown) => {
   const account = await resolveAccount(ctx, p, id, "draft");
-  const parsed = SearchSpecSchema.safeParse(specInput);
+  const { isAsset, input } = splitCampaignType(specInput);
+  const parsed = isAsset ? AssetCampaignSpecSchema.safeParse(input) : SearchSpecSchema.safeParse(input);
   if (!parsed.success) {
     throw new NodiError("invalid_input", "Check the campaign fields.", 400, parsed.error.issues.slice(0, 20).map((i) => ({ field: i.path.join("."), problem: i.message })));
   }
   const planId = crypto.randomUUID();
-  const ops = searchCampaignOperations(parsed.data, planAccount(account), planId.slice(0, 8));
+  const ops = isAsset ? assetCampaignOperations(parsed.data as AssetCampaignSpec, planAccount(account), planId.slice(0, 8)) : searchCampaignOperations(parsed.data as SearchSpec, planAccount(account), planId.slice(0, 8));
   const plan = newPlan(`${p.kind}:${p.label}`, planAccount(account), ops, parsed.data.business_context);
   plan.id = planId; // the visible tag in the campaign name uses this ID
   return savePlan(ctx, p, plan, account);
