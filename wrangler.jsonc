@@ -2,7 +2,7 @@
   // Nodi Ads Cloud — one Worker serves the MCP endpoint, the OAuth server, the
   // dashboard API and the dashboard itself. Everything here is Cloudflare Free-plan compatible.
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "nodi-ads",
+  "name": "nodi-ads-cloudflare",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
 
