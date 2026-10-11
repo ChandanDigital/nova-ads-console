@@ -24,6 +24,7 @@ export const planAccount = (a: AccountRow): PlanAccount => ({
 /** Turns a plan into the JSON body entries for GoogleAdsService.Mutate. */
 export const compile = (plan: Plan): unknown[] =>
   plan.operations.map((op) => {
+    if (op.kind === "recommendation") throw new NodiError("invalid_plan", "Recommendation plans are not sent through the mutate endpoint.", 500);
     const info = KINDS[op.kind]!;
     if (op.action === "create") return { [info.op]: { create: op.payload } };
     return { [info.op]: { update: { ...op.payload, resourceName: op.resource_name }, updateMask: op.field_mask.join(",") } };
