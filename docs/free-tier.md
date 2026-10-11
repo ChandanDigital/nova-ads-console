@@ -20,7 +20,7 @@ Nothing in this project calls a paid API, enables a billing feature, or upgrades
 
 1. **10 ms CPU per request.** Parsing a big Google response costs CPU, so reports are capped at **250 rows per query** (`MAX_ROWS_PER_QUERY`) and the audit reads 200 rows per query. A warm Node benchmark of the response handling (JSON parse + key conversion + serialise) measured about 1.0 ms for 200 rows and 6.8 ms for 1,000 rows; real Workers timing has **not** been measured. If a request still exceeds the CPU limit Cloudflare returns Error 1102: choose a shorter date range. Raising the cap is possible, but at your own risk on the free plan.
 2. **50 subrequests per request.** Account discovery reads at most 30 accessible accounts per run and reports truncation.
-3. **No always-on monitors.** A cron trigger has the same 10 ms budget, so the original local "monitor / auto-pause at a spend threshold" is not provided. The daily cron only purges expired rows and checks that the Google token still refreshes.
+3. **No always-on monitors and no auto-pause.** (A daily read-only alert check does exist; see `get_alerts`. It only raises alerts and runs inside the same 10 ms budget.) A cron trigger has the same 10 ms budget, so the original local "monitor / auto-pause at a spend threshold" is not provided. The daily cron only purges expired rows and checks that the Google token still refreshes.
 4. **100k D1 writes/day.** Each request writes about 3–6 rows (usage counters, audit). That leaves room for roughly 10,000 dashboard/MCP requests a day under the 60k self-limit. A busy multi-client agency deployment could need the paid plan: this project will tell you and stop, not upgrade for you.
 
 ## The dashboard's quota page
