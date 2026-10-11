@@ -7,6 +7,7 @@ import { adsFor, getAccountRow, resolveAccount, type AccountRow } from "./accoun
 import { KINDS, newPlan, planHash, setPath, validatePlanShape, PlanOperationSchema, type Plan, type PlanOperation } from "./plans";
 import { attachBefore, compile, fetchCurrent, normalize, planAccount, savePlan } from "./planner";
 import { camelToSnake, gaqlString, pathGet, snakeToCamel } from "../google/gaql";
+import { isRecommendationPlan, runRecommendations, validateRecommendations, verifyRecommendations } from "./recommendations";
 
 interface PlanRow {
   id: string;
@@ -94,8 +95,12 @@ export const validatePlan = async (ctx: Ctx, p: Principal, id: string) => {
   }
   try {
     await freshCheck(ctx, account, plan);
-    const res = await adsFor(ctx, account).mutate(account.customer_id, compile(plan), { validateOnly: true });
-    const validation = { validated_operations: plan.operations.length, google_responses: (res.mutateOperationResponses ?? []).length, validate_only: true };
+    let validation: Record<string, unknown>;
+    if (isRecommendationPlan(plan)) validation = await validateRecommendations(ctx, account, plan);
+    else {
+      const res = await adsFor(ctx, account).mutate(account.customer_id, compile(plan), { validateOnly: true });
+      validation = { validated_operations: plan.operations.length, google_responses: (res.mutateOperationResponses ?? []).length, validate_only: true };
+    }
     await setStatus(ctx, id, "awaiting_approval", { validated_at: now(), validation_json: JSON.stringify(validation) });
     await audit(ctx.db, { actor_type: p.kind === "admin" ? "admin" : "mcp", actor_id: p.id, action: "plan_validated", target: id, outcome: "ok" });
     return { status: "awaiting_approval", plan_hash: row.hash, validation, next_action: "A human must approve this exact plan in the dashboard." };
@@ -205,7 +210,8 @@ export const executePlan = async (ctx: Ctx, p: Principal, id: string) => {
   const ads = adsFor(ctx, account);
   // Read-only pre-flight: nothing has been sent to Google that can change the account yet.
   await freshCheck(ctx, account, plan);
-  await ads.mutate(account.customer_id, compile(plan), { validateOnly: true });
+  if (isRecommendationPlan(plan)) await validateRecommendations(ctx, account, plan);
+  else await ads.mutate(account.customer_id, compile(plan), { validateOnly: true });
   if (await isGlobalStop(ctx.db)) throw new NodiError("stopped", "Global stop changed before dispatch.", 423);
 
   // Compare-and-set: exactly one caller can move awaiting_approval -> running, so a plan can never be dispatched twice.
@@ -219,12 +225,18 @@ export const executePlan = async (ctx: Ctx, p: Principal, id: string) => {
   let errors: unknown[] = [];
   let requestId: string | undefined;
   try {
-    const response = await ads.mutate(account.customer_id, compile(plan), { validateOnly: false });
-    const resources = plan.operations.map((_, i) => resourceOf(response.mutateOperationResponses?.[i]));
-    // Persist the API result before verification: a crash after this point still leaves the resource IDs.
-    await ctx.db.run("UPDATE executions SET results_json = ? WHERE plan_id = ?", JSON.stringify(resources.map((r, i) => ({ operation_id: plan.operations[i]!.id, resource_name: r, status: "api_accepted" }))), id);
-    results = await verify(ctx, account, plan, resources);
-    status = overall(results);
+    if (isRecommendationPlan(plan)) {
+      results = await runRecommendations(ctx, account, plan, (names) =>
+        ctx.db.run("UPDATE executions SET results_json = ? WHERE plan_id = ?", JSON.stringify(names.map((r, i) => ({ operation_id: plan.operations[i]!.id, resource_name: r, status: "api_accepted" }))), id).then(() => undefined));
+      status = overall(results);
+    } else {
+      const response = await ads.mutate(account.customer_id, compile(plan), { validateOnly: false });
+      const resources = plan.operations.map((_, i) => resourceOf(response.mutateOperationResponses?.[i]));
+      // Persist the API result before verification: a crash after this point still leaves the resource IDs.
+      await ctx.db.run("UPDATE executions SET results_json = ? WHERE plan_id = ?", JSON.stringify(resources.map((r, i) => ({ operation_id: plan.operations[i]!.id, resource_name: r, status: "api_accepted" }))), id);
+      results = await verify(ctx, account, plan, resources);
+      status = overall(results);
+    }
   } catch (e) {
     if (e instanceof NodiError) {
       status = e.code === "outcome_unknown" ? "outcome_unknown" : "failed";
@@ -257,6 +269,14 @@ export const reconcilePlan = async (ctx: Ctx, p: Principal, id: string) => {
   const { row, plan, account } = await loadPlanFor(ctx, p, id, "draft");
   const ex = await ctx.db.first<{ status: string; results_json: string | null }>("SELECT status, results_json FROM executions WHERE plan_id = ?", id);
   if (!ex) throw new NodiError("nothing_to_reconcile", "This plan was never executed.", 409);
+  if (isRecommendationPlan(plan)) {
+    const results = await verifyRecommendations(ctx, account, plan);
+    const status = overall(results);
+    await ctx.db.run("UPDATE executions SET status = ?, results_json = ?, finished_at = COALESCE(finished_at, ?) WHERE plan_id = ?", status, JSON.stringify(results), now(), id);
+    await setStatus(ctx, id, status);
+    await audit(ctx.db, { actor_type: p.kind === "admin" ? "admin" : "mcp", actor_id: p.id, action: "plan_reconciled", target: id, outcome: "ok", detail: { status } });
+    return getOperationStatus(ctx, p, id);
+  }
   const prior = ex.results_json ? (JSON.parse(ex.results_json) as { resource_name: string | null }[]) : [];
   let resources: (string | null)[] = plan.operations.map((_, i) => prior[i]?.resource_name ?? null);
   if (!prior.length) {
@@ -291,6 +311,7 @@ export const createRecoveryPlan = async (ctx: Ctx, p: Principal, id: string) => 
   const { plan, account } = await loadPlanFor(ctx, p, id, "draft");
   const ex = await ctx.db.first<{ status: string; results_json: string | null }>("SELECT status, results_json FROM executions WHERE plan_id = ?", id);
   if (!ex || !["succeeded", "partially_succeeded"].includes(ex.status)) throw new NodiError("inspect_first", "Resolve uncertain or failed outcomes before drafting recovery.", 409);
+  if (isRecommendationPlan(plan)) throw new NodiError("recovery_unavailable", "Nodi cannot undo an applied or dismissed recommendation. Review Google Ads change history and draft a new reviewed plan.", 409);
   const results = JSON.parse(ex.results_json ?? "[]") as OpResult[];
   const ops: PlanOperation[] = [];
   plan.operations.forEach((op, i) => {
