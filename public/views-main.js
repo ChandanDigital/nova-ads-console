@@ -29,6 +29,7 @@ export const viewOverview = (root, nav) => load(root, async () => {
   ];
   nav.setPending(o.pending_plans.length);
   const stop = h("input", { type: "checkbox", checked: o.global_stop, id: "stop", "aria-label": t("ov_globalStop"), onchange: guard(async (e) => { await api("POST", "/api/settings/global-stop", { stop: e.target.checked }); toast(e.target.checked ? "Global stop ON" : "Global stop off"); }) });
+  const alerts = await api("GET", "/api/alerts");
   const usage = o.usage.metrics.filter((m) => ["requests", "d1_rows_written", "mcp_calls", "ads_calls"].includes(m.metric));
   return page(t("ov_title"),
     h("div", { class: "grid cols-4" },
@@ -42,6 +43,12 @@ export const viewOverview = (root, nav) => load(root, async () => {
     h("div", { class: "grid cols-2" },
       section(t("ov_pending"), o.pending_plans.length ? table([{ label: "Plan", render: (r) => r.id.slice(0, 8) }, { label: t("perf_account"), key: "account_id" }, { label: "", render: (r) => h("button", { class: "small", onclick: () => go("#/approvals/" + r.id) }, t("open")) }], o.pending_plans) : h("p", { class: "muted" }, t("none_pending"))),
       section(t("ov_activity"), table([{ label: "", render: (r) => when(r.ts) }, { label: "", key: "action" }, { label: "", render: (r) => statusChip(r.outcome) }], o.recent_activity))),
+    section(t("ov_alerts"),
+      h("p", { class: "muted small" }, t("ov_alertsHelp"), alerts.last_check_at ? ` Last check: ${when(alerts.last_check_at)}.` : ""),
+      alerts.alerts.length
+        ? h("div", { class: "stack" }, alerts.alerts.map((a) => h("div", { class: "card flat" }, h("div", { class: "row spread" }, h("strong", {}, a.title), chip(a.severity, a.severity === "high" ? "bad" : a.severity === "warn" ? "warn" : "")), h("div", { class: "small muted" }, `${a.account_id} · ${a.kind.replaceAll("_", " ")} · first seen ${when(a.first_seen)}`), h("div", { class: "small" }, a.detail?.note ?? a.detail?.message ?? ""))))
+        : h("p", { class: "muted" }, t("ov_alertsNone")),
+      h("div", { class: "row" }, h("button", { class: "small", id: "alerts-run", onclick: guard(async () => { const r = await api("POST", "/api/alerts/run"); toast(`Checked ${r.accounts} account(s): ${r.raised} alert(s)`); viewOverview(root, nav); }) }, t("ov_alertsRun")))),
     section(t("ov_globalStop"), h("div", { class: "row" }, h("label", { class: "switch" }, stop, h("span")), h("span", { class: "muted" }, t("ov_globalStopHelp")))));
 });
 
@@ -144,6 +151,7 @@ const renderTerms = (d) => h("div", { class: "stack" }, callout("info", `Saved a
   { label: t("clicks"), num: true, render: (r) => fmtInt(m(r, "clicks")) }, { label: t("conversions"), num: true, render: (r) => fmtNum(m(r, "conversions"), 1) },
 ], d.rows, { empty: "No search-term data." }));
 const renderAudit = (a) => h("div", { class: "stack" },
+  h("div", { class: "row no-print" }, h("button", { class: "small", type: "button", "data-print": "1" }, t("print"))),
   h("div", { class: "grid cols-4" }, kpi("Failing checks", String(a.summary.fail), "", a.summary.fail ? "bad" : "ok"), kpi("Passing", String(a.summary.pass), "", "ok"), kpi("High severity", String(a.summary.high), "", a.summary.high ? "bad" : ""), kpi(t("cost"), a.totals.cost)),
   a.findings.map((f) => h("div", { class: "card flat stack" }, h("div", { class: "row spread" }, h("strong", {}, f.title), h("div", { class: "row" }, statusChip(f.status === "fail" ? "fail" : f.status === "pass" ? "ok" : "info"), chip(f.severity))), f.status === "fail" ? h("p", { class: "muted" }, f.recommendation) : null,
     f.status === "fail" ? h("details", {}, h("summary", {}, "Evidence"), h("pre", { class: "mono small" }, JSON.stringify(f.evidence, null, 2))) : null)),
@@ -167,6 +175,7 @@ const describeOp = (op, currency) => {
   if (p.keyword) bits.push(`${p.negative ? "NEGATIVE " : ""}keyword: ${p.keyword.text} [${p.keyword.matchType}]`);
   if (p.ad?.responsiveSearchAd) bits.push(`RSA: ${p.ad.responsiveSearchAd.headlines.map((x) => x.text).join(" | ")}`);
   if (p.location) bits.push(`${p.negative ? "exclude " : ""}location: ${p.location.geoTargetConstant}`);
+  if (op.kind === "recommendation") bits.push(`${op.action === "apply" ? "APPLY" : "DISMISS"} Google recommendation ${op.evidence?.type ?? ""}${op.evidence?.campaign ? " for " + op.evidence.campaign : ""}`);
   return bits;
 };
 
@@ -181,7 +190,7 @@ const viewPlan = (root, id) => load(root, async () => {
   const canApprove = d.status === "awaiting_approval";
   return page(t("apr_review"),
     h("div", { class: "row spread" }, h("div", { class: "row" }, statusChip(d.status), h("span", { class: "muted" }, `${plan.account.name} (${plan.account.customer_id}) · ${cur} · ${plan.account.timezone}`)), h("a", { href: "#/approvals" }, "← " + t("nav_approvals"))),
-    h("div", { class: "row small" }, h("span", { class: "muted" }, t("apr_hash")), h("code", {}, d.plan_hash)),
+    h("div", { class: "row small" }, h("span", { class: "muted" }, t("apr_hash")), h("code", {}, d.plan_hash), h("button", { class: "small no-print", type: "button", "data-print": "1" }, t("print"))),
     d.validation?.code ? callout("bad", `Validation failed: ${d.validation.message}`, h("pre", { class: "mono small" }, JSON.stringify(d.validation.details, null, 2))) : null,
     h("div", { class: "stack" }, plan.operations.map((op, i) => h("div", { class: "card flat stack" },
       h("div", { class: "row spread" }, h("strong", {}, `${i + 1}. ${op.kind.replaceAll("_", " ")} — ${op.action}`), h("span", { class: "mono small muted" }, op.resource_name ?? "new")),
