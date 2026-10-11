@@ -1,0 +1,40 @@
+{
+  // Nodi Ads Cloud — one Worker serves the MCP endpoint, the OAuth server, the
+  // dashboard API and the dashboard itself. Everything here is Cloudflare Free-plan compatible.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nodi-ads",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+
+  // Static dashboard (Workers Static Assets). Requests for the files in ./public are
+  // answered directly by Cloudflare; only the paths below run Worker code.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/mcp", "/mcp/*", "/oauth/*", "/.well-known/*", "/healthz"]
+  },
+
+  // D1 (free: 5 GB, 5M rows read/day, 100k rows written/day). No database_id on purpose:
+  // current Wrangler creates the database on first deploy. If your first deploy reports a
+  // D1 error, create "nodi-ads-db" in the Cloudflare dashboard and add its "database_id" here.
+  "d1_databases": [
+    { "binding": "DB", "database_name": "nodi-ads-db", "migrations_dir": "migrations" }
+  ],
+
+  // One daily maintenance run (free plan allows 5 cron triggers per account).
+  "triggers": { "crons": ["17 3 * * *"] },
+
+  "observability": { "enabled": true },
+
+  // Non-secret defaults. Secrets (GOOGLE_CLIENT_SECRET, TOKEN_ENCRYPTION_KEY, ...) are NOT here:
+  // set them in the Cloudflare dashboard under Settings > Variables and Secrets.
+  "vars": {
+    "GOOGLE_ADS_API_VERSION": "v25",
+    "MCP_CALLS_PER_DAY": "3000",
+    "GOOGLE_ADS_CALLS_PER_DAY": "5000",
+    "MAX_ROWS_PER_QUERY": "250",
+    "D1_WRITES_SOFT_LIMIT": "60000",
+    "D1_READS_SOFT_LIMIT": "3000000",
+    "REQUESTS_SOFT_LIMIT": "70000"
+  }
+}

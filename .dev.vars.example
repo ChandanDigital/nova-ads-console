@@ -1,0 +1,6 @@
+# Only for running the Worker on your own computer (not needed for the Cloudflare dashboard setup).
+# Copy to .dev.vars. Never commit real values.
+TOKEN_ENCRYPTION_KEY=REPLACE_WITH_32_RANDOM_BYTES_BASE64
+GOOGLE_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-web-client-secret
+ADMIN_SETUP_SECRET=REPLACE_WITH_A_LONG_RANDOM_STRING_AT_LEAST_24_CHARS
