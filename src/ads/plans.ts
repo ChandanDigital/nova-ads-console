@@ -30,11 +30,13 @@ export const KINDS: Record<string, KindInfo> = {
   ad_group_ad: { op: "adGroupAdOperation", coll: "adGroupAds", updatable: ["status"] },
   campaign_criterion: { op: "campaignCriterionOperation", coll: "campaignCriteria", updatable: ["bidModifier"] },
   asset: { op: "assetOperation", coll: "assets", updatable: [] },
+  asset_group: { op: "assetGroupOperation", coll: "assetGroups", updatable: ["name", "status"] },
+  asset_group_asset: { op: "assetGroupAssetOperation", coll: "assetGroupAssets", updatable: [] },
   campaign_asset: { op: "campaignAssetOperation", coll: "campaignAssets", updatable: [] },
 };
 export const KIND_NAMES = Object.keys(KINDS) as [string, ...string[]];
 
-const ENUM_ID_KINDS = new Set(["campaign_asset"]);
+const ENUM_ID_KINDS = new Set(["campaign_asset", "asset_group_asset"]);
 
 export const resourceValid = (resource: string, account: string, kind: string): void => {
   const info = KINDS[kind];
@@ -187,7 +189,7 @@ export const requiredPermissions = (ops: PlanOperation[]): string[] => {
   for (const o of ops) {
     const structural = o.action === "create" && (o.kind === "campaign" || o.kind === "campaign_budget");
     if (structural) perms.add("create_campaign");
-    else if (o.action === "update" || !underNew.has(o.id)) perms.add("optimisation");
+    else if (o.action === "update" || (!underNew.has(o.id) && !(o.kind === "asset" && created.size > 0))) perms.add("optimisation");
     if (o.payload.status === "ENABLED" && (o.action === "update" || o.kind === "campaign" || !underNew.has(o.id))) perms.add("launch");
     if (o.kind === "campaign_budget" && o.action === "update" && o.field_mask.includes("amountMicros")) perms.add("budget_change");
   }
