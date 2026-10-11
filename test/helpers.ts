@@ -10,7 +10,7 @@ export const SETUP_SECRET = "test-setup-secret-0123456789abcdef0123456789";
 
 const TABLES = [
   "admin", "sessions", "rate_limits", "used_setup_secrets", "settings", "api_tokens", "oauth_clients", "oauth_pending", "oauth_codes",
-  "google_oauth_states", "google_connections", "accounts", "plans", "approvals", "executions", "evidence", "reports", "audit_log", "usage_daily", "legacy_import",
+  "google_oauth_states", "google_connections", "accounts", "plans", "approvals", "executions", "evidence", "reports", "audit_log", "usage_daily", "legacy_import", "alerts",
 ];
 
 /** Empties every table so each test starts from a fresh install (the schema itself stays). */
