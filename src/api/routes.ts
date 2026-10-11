@@ -13,6 +13,7 @@ import { disconnectGoogle, finishGoogleConnect, startGoogleConnect } from "../go
 import { addAccount, discoverAccounts, listAccounts, setAllowed, refreshIdentity, resolveAccount } from "../ads/accounts";
 import * as R from "../ads/reports";
 import { auditAccount } from "../ads/audit";
+import { listAlerts, runMonitors } from "../ads/monitor";
 import * as X from "../ads/execute";
 import { runDiagnostics } from "./diagnostics";
 import { cloudflareUsage } from "./cf-usage";
@@ -189,6 +190,7 @@ secured("POST", "/api/oauth/pending/:id/decision", async (ctx, p, s) => decide(c
 secured("GET", "/api/settings", async (ctx) => ({
   global_stop: (await getSetting(ctx.db, "global_stop")) === "1",
   max_daily_budget_micros: await getSetting(ctx.db, "max_daily_budget_micros"),
+  alert_min_spend_micros: await getSetting(ctx.db, "alert_min_spend_micros"),
 }));
 secured("POST", "/api/settings/global-stop", async (ctx, _p, s) => {
   const b = await readJson<{ stop?: boolean }>(ctx.request);
@@ -212,6 +214,22 @@ secured("GET", "/api/audit", async (ctx) => {
 });
 secured("GET", "/api/diagnostics", async (ctx) => runDiagnostics(ctx, q(ctx, "deep") === "1"));
 secured("GET", "/api/usage", async (ctx) => ({ ...(await usageSummary(ctx.env, ctx.db)), cloudflare: await cloudflareUsage(ctx.env) }));
+secured("GET", "/api/alerts", async (ctx) => listAlerts(ctx, null, { includeResolved: q(ctx, "resolved") === "1" }));
+secured("POST", "/api/alerts/run", async (ctx, _p, s) => {
+  const r = await runMonitors(ctx);
+  await audit(ctx.db, { actor_type: "admin", actor_id: s.adminId, action: "alerts_run", outcome: "ok", detail: r, ip_hash: ctx.ipHash });
+  return r;
+});
+secured("POST", "/api/settings/alerts", async (ctx, _p, s) => {
+  const b = await readJson<{ min_spend?: string | null }>(ctx.request);
+  if (b.min_spend === null || b.min_spend === "") await setSetting(ctx.db, "alert_min_spend_micros", "");
+  else {
+    const { moneyMicros } = await import("../google/gaql");
+    await setSetting(ctx.db, "alert_min_spend_micros", moneyMicros(b.min_spend).toString());
+  }
+  await audit(ctx.db, { actor_type: "admin", actor_id: s.adminId, action: "alert_threshold_set", outcome: "ok", detail: { min_spend: b.min_spend }, ip_hash: ctx.ipHash });
+  return { ok: true };
+});
 secured("GET", "/api/capabilities", async () => capabilityList());
 secured("GET", "/api/mcp-info", async (ctx) => ({
   mcp_url: `${ctx.origin}/mcp`,
