@@ -8,20 +8,21 @@ Environment: Windows 11, Node 22.23.2, Wrangler 4.149.0 (local workerd runtime),
 
 | Suite | Command | Result |
 |---|---|---|
-| Worker, in the Workers runtime | `npx vitest run` | **13 files, 198 tests, 0 failed** |
+| Worker, in the Workers runtime | `npx vitest run` | **14 files, 231 tests, 0 failed** |
 | Dashboard logic (DOM) | `npx vitest run -c vitest.ui.config.ts` | **1 file, 11 tests, 0 failed** |
 | Type check (strict) | `npm run typecheck` | no errors |
 | Python plugin (original 148 + 8 new) | `pytest tests` | **156 passed** |
 | Clean install | `npm ci` from the lock file in an empty folder, then typecheck + tests | passed |
 | Dependency audit | `npm audit` (including dev dependencies) | 0 vulnerabilities |
-| Deployment bundle | `wrangler deploy --dry-run` | bundles; 1701 KiB, 304 KiB gzipped; bindings DB + ASSETS |
+| Deployment bundle | `wrangler deploy --dry-run` | bundles; 1712 KiB, 307 KiB gzipped; bindings DB + ASSETS |
 | Migration SQL in sync with source | `npm run gen:migration` then diff | identical |
 
 ## Worker tests by file
 
 | File | Tests | What it establishes |
 |---|---:|---|
-| `admin.test.ts` | 20 | first-time setup needs the Cloudflare-held secret; wrong/missing secret refused; credential stored only as a hash; login, logout, rate limiting; HttpOnly+Secure+SameSite cookie; CSRF header and same-origin checks on every mutation; bearer tokens never work on dashboard routes; **credential replacement**: used secret refused, new secret works once, old credential and sessions die, AI tokens revoked, plans/approvals preserved, unreachable with an AI token, guessing is rate-limited, confirmation phrase required |
+| `admin.test.ts` | 23 | first-time setup needs the Cloudflare-held secret; wrong/missing secret refused; credential stored only as a hash; login, logout, rate limiting; HttpOnly+Secure+SameSite cookie; CSRF header and same-origin checks on every mutation; bearer tokens never work on dashboard routes; **credential replacement**: used secret refused, new secret works once, old credential and sessions die, AI tokens revoked, plans/approvals preserved, unreachable with an AI token, guessing is rate-limited, confirmation phrase required |
+| `asset-campaigns.test.ts` | 30 | Display, Shopping, Performance Max, Demand Gen and App-install payloads all validate against Google's v25 REST schema; paused by default; right channel types; a full Performance Max asset group; 15 missing/invalid-input refusals; each type through the MCP tool, human approval and execution; Search still works with `campaign_type` omitted or `SEARCH` |
 | `crypto.test.ts` | 9 | AES-GCM round trip, fresh IV, row binding (AAD), tamper detection, changed/rotated/invalid key messages, canonical hashing |
 | `migrations.test.ts` | 5 | no destructive SQL, all `IF NOT EXISTS`, idempotent, an upgrade keeps existing rows |
 | `google.test.ts` | 11 | consent URL (PKCE S256, offline, only Ads scope, secrets not exposed), server-side exchange, sealed token storage, manager-child discovery with `login-customer-id`, **no developer-token header**, single-use state, state bound to the browser session, missing refresh token / scope refused, refresh and caching, `invalid_grant` handling with guidance, disconnect revokes and wipes |
