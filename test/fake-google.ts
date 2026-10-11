@@ -36,6 +36,11 @@ export class FakeGoogle {
   accessible = [CUSTOMER, MANAGER];
   mutateFailure: null | "timeout" | "server_error" | { status: number; body: unknown } = null;
   validateFailure: null | { status: number; body: unknown } = null;
+  /** makes every non-identity search fail (for the monitor) */
+  searchFailure: null | { status: number; body: unknown } = null;
+  /** RecommendationService answers 200 but changes nothing (to prove verification catches it) */
+  recommendNoEffect = false;
+  recommendFailure: null | { status: number; body: unknown } = null;
   nextId = 5000;
   private original: typeof fetch | undefined;
 
@@ -45,7 +50,7 @@ export class FakeGoogle {
   }
   restore() { vi.unstubAllGlobals(); }
   reset() {
-    this.calls = []; this.mutateSchemaErrors = []; this.mutateFailure = null; this.validateFailure = null; this.resources.clear(); this.cannedRows = {}; this.refreshOk = true; this.customers = defaultCustomers();
+    this.calls = []; this.mutateSchemaErrors = []; this.mutateFailure = null; this.validateFailure = null; this.searchFailure = null; this.recommendNoEffect = false; this.recommendFailure = null; this.resources.clear(); this.cannedRows = {}; this.refreshOk = true; this.customers = defaultCustomers();
   }
 
   seed(rn: string, obj: Record<string, any>) { this.resources.set(rn, { resourceName: rn, ...obj }); }
@@ -73,6 +78,8 @@ export class FakeGoogle {
     if (path === "customers:listAccessibleCustomers") return this.json({ resourceNames: this.accessible.map((c) => `customers/${c}`) });
     const m = /^customers\/(\d+)\/googleAds:(search|mutate)$/.exec(path);
     if (m) return m[2] === "search" ? this.search(m[1]!, body, headers) : this.mutate(m[1]!, body);
+    const rm = /^customers\/(\d+)\/recommendations:(apply|dismiss)$/.exec(path);
+    if (rm) return this.recommend(rm[1]!, rm[2]!, body);
     if (path === "googleAdsFields:search") return this.json({ results: [{ name: "campaign.id", category: "ATTRIBUTE", selectable: true, filterable: true, sortable: true, dataType: "INT64" }] });
     if (path.endsWith(":generateKeywordIdeas")) return this.json({ results: [{ text: "dentist near me", keywordIdeaMetrics: { avgMonthlySearches: "1000" } }] });
     if (path === "geoTargetConstants:suggest") return this.json({ geoTargetConstantSuggestions: [{ geoTargetConstant: { resourceName: "geoTargetConstants/1007788", name: "Kolkata" } }] });
@@ -120,6 +127,7 @@ export class FakeGoogle {
       const rows = [MANAGER, CHILD].map((id) => ({ customerClient: { id, descriptiveName: this.customers[id].descriptiveName, currencyCode: this.customers[id].currencyCode, timeZone: this.customers[id].timeZone, manager: this.customers[id].manager || undefined, status: "ENABLED", level: id === MANAGER ? "0" : "1" } }));
       return this.json({ results: rows });
     }
+    if (this.searchFailure) return this.json(this.searchFailure.body, this.searchFailure.status);
     const inList = /\.resource_name\s+IN\s*\(([^)]*)\)/i.exec(q);
     if (inList) {
       const names = [...inList[1]!.matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((x) => x[1]!);
@@ -142,6 +150,20 @@ export class FakeGoogle {
       return this.json({ results });
     }
     return this.json({ results: this.cannedRows[from] ?? [] });
+  }
+
+  private recommend(cid: string, action: string, body: any): Response {
+    if (this.recommendFailure) return this.json(this.recommendFailure.body, this.recommendFailure.status);
+    const ops: { resourceName: string }[] = body.operations ?? [];
+    if (body.partialFailure !== false) return this.json({ error: { code: 400, message: "Nodi must send partialFailure=false" } }, 400);
+    for (const o of ops) if (!this.resources.has(o.resourceName)) return this.json({ error: { code: 404, message: "no such recommendation " + o.resourceName } }, 404);
+    if (!this.recommendNoEffect) {
+      for (const o of ops) {
+        if (action === "apply") this.resources.delete(o.resourceName);
+        else this.resources.set(o.resourceName, { ...this.resources.get(o.resourceName)!, dismissed: true });
+      }
+    }
+    return this.json({ results: ops.map((o) => ({ resourceName: o.resourceName })) });
   }
 
   private mutate(cid: string, body: any): Response {
