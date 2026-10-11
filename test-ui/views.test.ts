@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // @ts-expect-error browser ES modules without type declarations
 import { state } from "../public/core.js";
 // @ts-expect-error browser ES modules without type declarations
-import { viewAccounts, viewApprovals, viewConsent, viewAi } from "../public/views-main.js";
+import { viewAccounts, viewApprovals, viewConsent, viewAi, viewOverview } from "../public/views-main.js";
 // @ts-expect-error browser ES modules without type declarations
 import { viewLogin, viewSetup } from "../public/views-auth.js";
 
@@ -69,6 +69,18 @@ describe("approval screen", () => {
     expect(post.method).toBe("POST");
     expect(post.headers["x-csrf-token"]).toBe("csrf-token-1");
     expect(post.body).toEqual({ hash: "h".repeat(64), permissions: ["optimisation"], seconds: 900, confirmation: "APPROVE" });
+  });
+
+  it("shows a recommendation action in plain words, with a print button that carries no inline script", async () => {
+    const plan = { ...PLAN, plan: { ...PLAN.plan, required_permissions: ["apply_recommendation"], operations: [{ id: "rec0", kind: "recommendation", action: "apply", resource_name: "customers/3010086756/recommendations/kw1", field_mask: [], before: {}, payload: {}, evidence: { type: "KEYWORD", campaign: "customers/3010086756/campaigns/11" }, reason: "Google suggests it", spending_effect: "Google applies this KEYWORD recommendation as Google generated it.", recovery: "Nodi cannot undo it." }] } };
+    routes["GET /api/plans/rec"] = () => plan;
+    await viewApprovals(root(), "rec");
+    await tick();
+    expect(root().textContent).toContain("APPLY Google recommendation KEYWORD");
+    expect(root().textContent).toContain("apply_recommendation");
+    const print = root().querySelector("[data-print]") as HTMLButtonElement;
+    expect(print.textContent).toBe("Print / Save as PDF");
+    expect(print.hasAttribute("onclick")).toBe(false);
   });
 
   it("does not offer approval when the plan is not awaiting approval", async () => {
@@ -202,5 +214,32 @@ describe("sign-in screens", () => {
     root().querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
     await tick(60);
     expect(document.getElementById("toasts")!.textContent).toMatch(/no route|not correct|HTTP/);
+  });
+});
+
+describe("overview alerts", () => {
+  const overview = { connections: [{ status: "active", email: "o@example.com" }], accounts: { total: 1, allowed: 1 }, pending_plans: [], recent_activity: [], usage: { metrics: [] }, global_stop: false, mcp_url: "https://x/mcp", secrets_ok: true };
+  const setup = (alerts: unknown) => {
+    routes["GET /api/overview"] = () => overview;
+    routes["GET /api/diagnostics"] = () => [];
+    routes["GET /api/tokens"] = () => [];
+    routes["GET /api/alerts"] = () => alerts;
+  };
+  it("lists open alerts as plain text and can run the check", async () => {
+    setup({ last_check_at: 1760000000, last_result: null, alerts: [{ id: 1, account_id: "3010086756", kind: "spend_no_conversions", severity: "warn", title: "<img src=x onerror=alert(1)> Burning money", detail: { note: "Check tracking." }, first_seen: 1760000000, last_seen: 1760000000, resolved_at: null }] });
+    routes["POST /api/alerts/run"] = () => ({ accounts: 1, raised: 1, resolved: 0, errors: 0 });
+    await viewOverview(root(), { setPending() {} });
+    await tick();
+    expect(root().textContent).toContain("Burning money");
+    expect(root().textContent).toContain("Check tracking.");
+    expect(root().querySelector("img")).toBeNull();
+    await click(root().querySelector("#alerts-run"));
+    expect(calls.some((c) => c.method === "POST" && c.path === "/api/alerts/run" && c.headers["x-csrf-token"] === "csrf-token-1")).toBe(true);
+  });
+  it("says so when there are none", async () => {
+    setup({ last_check_at: null, last_result: null, alerts: [] });
+    await viewOverview(root(), { setPending() {} });
+    await tick();
+    expect(root().textContent).toContain("No open alerts.");
   });
 });
