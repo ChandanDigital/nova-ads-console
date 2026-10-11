@@ -29,7 +29,7 @@ describe("non-destructive migrations", () => {
     const db = new Db(env.DB);
     await db.run("INSERT INTO admin (id,label,credential_hash,created_at) VALUES ('primary','owner','keepme',1) ON CONFLICT(id) DO UPDATE SET credential_hash='keepme'");
     const r = await migrate(db);
-    expect(r.applied).toEqual(["0001_init"]);
+    expect(r.applied).toEqual(["0001_init", "0002_alerts"]);
     expect((await db.first<{ credential_hash: string }>("SELECT credential_hash FROM admin"))!.credential_hash).toBe("keepme");
   });
   it("renders SQL for wrangler d1 migrations", () => {
