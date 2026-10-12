@@ -51,7 +51,7 @@ describe("duplicate a Search campaign as a new paused campaign", () => {
     const p = (await mcpTool(draft, "preview_change_plan", { plan_id: d.plan_id })).body.data.plan;
     const byId = Object.fromEntries(p.operations.map((o: any) => [o.id, o.payload]));
     expect(byId.campaign.status).toBe("PAUSED");
-    expect(byId.campaign.name).toMatch(/^Copy of Search \[Nodi [0-9a-f]{8}\]$/);
+    expect(byId.campaign.name).toMatch(/^Copy of Search \[Nova [0-9a-f]{8}\]$/);
     expect(byId.campaign.networkSettings.targetSearchNetwork).toBe(true);
     expect(byId.campaign.geoTargetTypeSetting.positiveGeoTargetType).toBe("PRESENCE");
     expect(byId.budget.amountMicros).toBe("250000000");
