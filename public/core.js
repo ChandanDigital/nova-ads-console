@@ -86,7 +86,7 @@ export const micros = (m, cur) => `${fmtNum(Number(BigInt(m || 0) / 10000n) / 10
 export const when = (sec) => (sec ? new Date(sec * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—");
 export const chip = (text, kind = "") => h("span", { class: "chip " + kind }, h("span", { class: "dot" }), text);
 export const statusChip = (s) => {
-  const kind = { succeeded: "ok", active: "ok", ok: "ok", awaiting_approval: "warn", draft: "", validation_failed: "bad", failed: "bad", outcome_unknown: "bad", rejected: "", running: "info", error: "bad", revoked: "", partially_succeeded: "warn", warn: "warn", fail: "bad", info: "info" }[s] ?? "";
+  const kind = { succeeded: "ok", active: "ok", ok: "ok", ready: "warn", awaiting_approval: "warn", cancelled: "", draft: "", validation_failed: "bad", failed: "bad", outcome_unknown: "bad", rejected: "", running: "info", error: "bad", revoked: "", partially_succeeded: "warn", warn: "warn", fail: "bad", info: "info" }[s] ?? "";
   return chip(String(s).replaceAll("_", " "), kind);
 };
 
