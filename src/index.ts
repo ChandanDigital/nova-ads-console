@@ -22,7 +22,7 @@ const wellKnown = (ctx: Ctx): Response | null => {
 };
 
 const unauthorizedMcp = (ctx: Ctx): Response =>
-  new Response(JSON.stringify({ jsonrpc: "2.0", error: { code: -32001, message: "Authorization required. Connect through OAuth or send a Nodi API token." }, id: null }), {
+  new Response(JSON.stringify({ jsonrpc: "2.0", error: { code: -32001, message: "Authorization required. Connect through OAuth or send a Nova Ads API token." }, id: null }), {
     status: 401,
     headers: {
       "content-type": "application/json",
