@@ -1,5 +1,5 @@
 // Downloads Google's official REST discovery document for the Google Ads API and keeps only the
-// schemas needed to check that Nodi's mutate payloads use real field names, types and enum values.
+// schemas needed to check that Nova's mutate payloads use real field names, types and enum values.
 //   node scripts/make-ads-schema-fixture.mjs [version]     (default v25)
 // Output: test/fixtures/ads-<version>-mutate-schema.json
 import { writeFileSync, mkdirSync } from "node:fs";
