@@ -1,4 +1,4 @@
-/* Nodi Ads dashboard. No inline styles anywhere (strict CSP); all colours are tokens. */
+/* Nova Ads Console dashboard. No inline styles anywhere (strict CSP); all colours are tokens. */
 :root {
   --bg: #f5f6f8;
   --surface: #ffffff;
