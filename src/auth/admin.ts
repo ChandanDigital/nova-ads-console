@@ -8,7 +8,7 @@ import { parseCookies, sessionCookieName, sessionSetCookie, uaHash } from "../li
 const SESSION_TTL = 8 * 3600;
 const SESSION_IDLE = 2 * 3600;
 const ADMIN_ID = "primary";
-export const CREDENTIAL_PREFIX = "nodi_admin_";
+export const CREDENTIAL_PREFIX = "nova_admin_";
 
 export interface AdminSession {
   adminId: string;
@@ -110,7 +110,7 @@ const requireSetupSecretConfigured = (secret: string | undefined): string => {
   if (!secret || secret.length < 24) {
     throw new NodiError(
       "setup_secret_missing",
-      "ADMIN_SETUP_SECRET is not set (or shorter than 24 characters). Add it in Cloudflare: Workers > nodi-ads > Settings > Variables and Secrets.",
+      "ADMIN_SETUP_SECRET is not set (or shorter than 24 characters). Add it in Cloudflare: Workers > nova-ads-console > Settings > Variables and Secrets.",
       503,
     );
   }
