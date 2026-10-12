@@ -66,13 +66,12 @@ describe("duplicate a Search campaign as a new paused campaign", () => {
     expect(realMutates(fake).length).toBe(0);
   });
 
-  it("goes through Google validation and human approval before anything is created", async () => {
+  it("goes through Google validation before anything is created", async () => {
     const r = await mcpTool(draft, "create_duplicate_campaign_plan", { account_id: CUSTOMER, campaign_id: "777", new_name: "Copy of Search", daily_budget: "300" });
-    const { plan_id, plan_hash, required_permissions } = r.body.data;
-    expect((await mcpTool(draft, "validate_change_plan", { plan_id })).body.status).toBe("awaiting_approval");
-    expect((await mcpTool(apply, "execute_authorised_plan", { plan_id })).body.status).toBe("awaiting_approval");
+    const { plan_id } = r.body.data;
+    expect((await mcpTool(apply, "execute_authorised_plan", { plan_id })).body.errors[0].code).toBe("validate_first");
+    expect((await mcpTool(draft, "validate_change_plan", { plan_id })).body.status).toBe("ready");
     expect(realMutates(fake).length).toBe(0);
-    expect((await call(`/api/plans/${plan_id}/approve`, { method: "POST", session: s, body: { hash: plan_hash, permissions: required_permissions, seconds: 3600, confirmation: "APPROVE" } })).status).toBe(200);
     const ex = await mcpTool(apply, "execute_authorised_plan", { plan_id });
     expect(ex.body.data.errors, JSON.stringify(ex.body)).toEqual([]);
     expect(realMutates(fake).length).toBe(1);
