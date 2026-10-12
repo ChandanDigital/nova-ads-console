@@ -3,7 +3,7 @@ import { KINDS, SearchSpecSchema, searchCampaignOperations, newPlan, PlanOperati
 import { compile } from "../src/ads/planner";
 import { pathExists, resourceSchema, schemaRevision, validateMutateOperation, validateAgainst } from "./schema-validate";
 
-// Google publishes a machine-readable schema of the REST API. These tests check every payload Nodi can
+// Google publishes a machine-readable schema of the REST API. These tests check every payload Nova Ads can
 // produce against it (field names, types, enum values), so a typo cannot slip through to a live account.
 const account = { customer_id: "1234567890", name: "T", currency: "INR", timezone: "Asia/Kolkata", manager: false, login_customer_id: null };
 
