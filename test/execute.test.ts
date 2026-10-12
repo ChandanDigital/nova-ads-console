@@ -66,7 +66,7 @@ describe("campaign creation workflow", () => {
     expect(r.body.data.status).toBe("succeeded");
     expect(realMutates(fake).length).toBe(1);
 
-    const campaign = [...fake.resources.values()].find((x) => x.name?.startsWith("Clinic Search [Nodi") && !x.name.endsWith("budget"))!;
+    const campaign = [...fake.resources.values()].find((x) => x.name?.startsWith("Clinic Search [Nova") && !x.name.endsWith("budget"))!;
     expect(campaign.status).toBe("PAUSED"); // nothing launched automatically
     expect(campaign.campaignBudget).toMatch(/campaignBudgets\/\d+$/); // temp IDs were resolved
     const budget = [...fake.resources.values()].find((x) => x.name?.endsWith("budget"))!;
@@ -324,8 +324,8 @@ describe("failure handling", () => {
     await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id });
     fake.mutateFailure = null;
     const plan = JSON.parse((await env.DB.prepare("SELECT plan_json FROM plans WHERE id = ?").bind(p.plan_id).first<any>()).plan_json);
-    fake.seed(`customers/${CUSTOMER}/campaigns/9001`, { name: `Clinic Search [Nodi ${plan.id.slice(0, 8)}]`, status: "PAUSED" });
-    fake.seed(`customers/${CUSTOMER}/campaignBudgets/9000`, { name: `Clinic Search [Nodi ${plan.id.slice(0, 8)}] budget` });
+    fake.seed(`customers/${CUSTOMER}/campaigns/9001`, { name: `Clinic Search [Nova ${plan.id.slice(0, 8)}]`, status: "PAUSED" });
+    fake.seed(`customers/${CUSTOMER}/campaignBudgets/9000`, { name: `Clinic Search [Nova ${plan.id.slice(0, 8)}] budget` });
     const r = await mcpTool(draft, "reconcile_operation", { plan_id: p.plan_id });
     const byOp = Object.fromEntries(r.body.data.results.map((x: any) => [x.operation_id, x]));
     expect(byOp.campaign.resource_name).toBe(`customers/${CUSTOMER}/campaigns/9001`);
