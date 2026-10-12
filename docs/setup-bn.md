@@ -18,7 +18,7 @@
 ## ধাপ ১ — GitHub-এ প্রাইভেট রিপোজিটরি বানান
 
 1. GitHub-এ গিয়ে **New repository** চাপুন।
-2. নাম দিন `nodi-ads-cloud`। **Private** বেছে নিন। "Add a README" টিক দেবেন না। **Create repository** চাপুন।
+2. নাম দিন `nova-ads-console`। **Private** বেছে নিন। "Add a README" টিক দেবেন না। **Create repository** চাপুন।
 3. কম্পিউটারে ZIP ফাইলটি **Extract (আনজিপ)** করুন।
 4. নতুন রিপোজিটরির পাতায় **uploading an existing file** লিঙ্কে চাপুন।
 5. আনজিপ করা ফোল্ডারের **ভেতরের ফাইল ও ফোল্ডারগুলো** (ফোল্ডারটি নিজে নয়) টেনে এনে ছাড়ুন। GitHub একবারে প্রায় ১০০টি ফাইল নেয়, তাই **২–৩ ধাপে** দিন:
@@ -33,18 +33,18 @@
 ## ধাপ ২ — Cloudflare-এ প্রকল্প তৈরি (GitHub থেকে)
 
 1. Cloudflare ড্যাশবোর্ড → **Workers & Pages** → **Create** → **Import a repository** (Workers Builds)।
-2. GitHub অ্যাকাউন্ট যুক্ত করুন; Cloudflare GitHub অ্যাপকে **শুধু `nodi-ads-cloud` রিপোজিটরির** অনুমতি দিন।
-3. রিপোজিটরি বেছে নিন। **Project name** অবশ্যই লিখুন: **`nodi-ads-cloudflare`** (এর সঙ্গে `wrangler.jsonc`-এর নাম হুবহু মিলতে হবে)। Build command ফাঁকা রাখুন; Deploy command যেমন আছে তেমনই থাকুক (`npx wrangler deploy`)। **Save and Deploy** চাপুন।
-4. সফল হলে আপনার ঠিকানা হবে `https://nodi-ads.<আপনার-সাবডোমেইন>.workers.dev`। ব্রাউজারে `…/healthz` খুললে `{"ok":true,…}` দেখা উচিত।
+2. GitHub অ্যাকাউন্ট যুক্ত করুন; Cloudflare GitHub অ্যাপকে **শুধু `nova-ads-console` রিপোজিটরির** অনুমতি দিন।
+3. রিপোজিটরি বেছে নিন। **Project name** অবশ্যই লিখুন: **`nova-ads-console`** (এর সঙ্গে `wrangler.jsonc`-এর নাম হুবহু মিলতে হবে)। Build command ফাঁকা রাখুন; Deploy command যেমন আছে তেমনই থাকুক (`npx wrangler deploy`)। **Save and Deploy** চাপুন।
+4. সফল হলে আপনার ঠিকানা হবে `https://nova-ads-console.<আপনার-সাবডোমেইন>.workers.dev`। ব্রাউজারে `…/healthz` খুললে `{"ok":true,…}` দেখা উচিত।
 
-**যদি বিল্ড D1 ডাটাবেস নিয়ে ভুল দেখায়:** Cloudflare → **Storage & databases → D1 → Create database** → নাম `nodi-ads-db` → তৈরির পর **Database ID** কপি করুন। GitHub-এ `wrangler.jsonc` খুলে পেন্সিল চাপুন এবং `d1_databases` অংশে `"database_id": "<কপি করা আইডি>"` যোগ করে Commit করুন। এরপর নিজে থেকেই আবার ডিপ্লয় হবে।
+**যদি বিল্ড D1 ডাটাবেস নিয়ে ভুল দেখায়:** Cloudflare → **Storage & databases → D1 → Create database** → নাম `nova-ads-console-db` → তৈরির পর **Database ID** কপি করুন। GitHub-এ `wrangler.jsonc` খুলে পেন্সিল চাপুন এবং `d1_databases` অংশে `"database_id": "<কপি করা আইডি>"` যোগ করে Commit করুন। এরপর নিজে থেকেই আবার ডিপ্লয় হবে।
 
 ডাটাবেসের টেবিলগুলো প্রথমবার চালু হলে নিজে থেকেই তৈরি হয় (কোনো কিছু মুছে না, ধ্বংসাত্মক নয়)। আপনাকে আলাদা কিছু চালাতে হবে না।
 
 ## ধাপ ৩ — গোপন মান (Secrets) যোগ করুন
 
-1. ব্রাউজারে `https://nodi-ads.<…>.workers.dev/generate-secrets.html` খুলুন। এই পাতা দুটি র‍্যান্ডম মান **আপনার ব্রাউজারের ভেতরেই** বানায়; কিছুই কোথাও পাঠানো বা সংরক্ষণ হয় না।
-2. Cloudflare → আপনার Worker (`nodi-ads-cloudflare`) → **Settings → Variables and Secrets → Add**। ধরন (Type) বেছে নিন **Secret**। চারটি যোগ করুন:
+1. ব্রাউজারে `https://nova-ads-console.<…>.workers.dev/generate-secrets.html` খুলুন। এই পাতা দুটি র‍্যান্ডম মান **আপনার ব্রাউজারের ভেতরেই** বানায়; কিছুই কোথাও পাঠানো বা সংরক্ষণ হয় না।
+2. Cloudflare → আপনার Worker (`nova-ads-console`) → **Settings → Variables and Secrets → Add**। ধরন (Type) বেছে নিন **Secret**। চারটি যোগ করুন:
 
 | নাম | মান |
 |---|---|
@@ -60,7 +60,7 @@
 1. [console.cloud.google.com](https://console.cloud.google.com) → নতুন **Project** তৈরি করুন (যেকোনো নাম)।
 2. **APIs & Services → Library** → **Google Ads API** খুঁজে **Enable** করুন।
 3. **OAuth consent screen** (Google Auth platform): User type **External**। Scope হিসেবে `https://www.googleapis.com/auth/adwords` যোগ করুন। তারপর অ্যাপটি **Publish (In production)** করুন। সাইন-ইনের সময় Google "unverified app" সতর্কতা দেখাবে — **Advanced → Continue** চাপুন। **অ্যাপ "Testing" মোডে রাখবেন না:** Testing মোডে রিফ্রেশ টোকেন **৭ দিনে** শেষ হয়ে যায়।
-4. **Credentials → Create credentials → OAuth client ID → Web application**। **Authorized redirect URIs**-এ হুবহু এই ঠিকানা দিন: `https://nodi-ads.<…>.workers.dev/oauth/google/callback` (ড্যাশবোর্ডের *Google connection* পাতায় ঠিক এই ঠিকানা দেখানো থাকে — এক অক্ষরও আলাদা হলে চলবে না)।
+4. **Credentials → Create credentials → OAuth client ID → Web application**। **Authorized redirect URIs**-এ হুবহু এই ঠিকানা দিন: `https://nova-ads-console.<…>.workers.dev/oauth/google/callback` (ড্যাশবোর্ডের *Google connection* পাতায় ঠিক এই ঠিকানা দেখানো থাকে — এক অক্ষরও আলাদা হলে চলবে না)।
 5. তৈরি হলে **Client ID** ও **Client secret** কপি করে ধাপ ৩-এর Cloudflare Secrets-এ বসান।
 
 **Developer Token আর লাগে না** (৯ সেপ্টেম্বর ২০২৬ থেকে বন্ধ)। আপনি কতটা অ্যাক্সেস পাবেন তা নির্ভর করে আপনার Cloud প্রজেক্টের Google Ads API **অ্যাক্সেস লেভেলের** ওপর: *Test access* শুধু Google Ads **টেস্ট অ্যাকাউন্টে** কাজ করে; আসল অ্যাকাউন্টের জন্য Basic/Standard access লাগে। ড্যাশবোর্ড `production_access_restricted` দেখালে [Google-এর এই পাতা](https://developers.google.com/google-ads/api/docs/api-policy/developer-token) দেখে অ্যাক্সেসের আবেদন করুন।
@@ -68,15 +68,15 @@
 ## ধাপ ৫ — প্রথমবার সাইন-ইন
 
 1. Worker-এর ঠিকানা খুলুন। `ADMIN_SETUP_SECRET`-এর মানটি দিন।
-2. পর্দায় আপনার **অ্যাডমিন ক্রেডেনশিয়াল** (`nodi_admin_…`) **একবারই** দেখানো হবে। এখনই পাসওয়ার্ড ম্যানেজারে সংরক্ষণ করুন। **কখনও AI চ্যাটে পেস্ট করবেন না।** "I have saved it" টিক দিয়ে Continue চাপুন।
+2. পর্দায় আপনার **অ্যাডমিন ক্রেডেনশিয়াল** (`nova_admin_…`) **একবারই** দেখানো হবে। এখনই পাসওয়ার্ড ম্যানেজারে সংরক্ষণ করুন। **কখনও AI চ্যাটে পেস্ট করবেন না।** "I have saved it" টিক দিয়ে Continue চাপুন।
 3. বাম মেনুতে **Google connection → Connect Google Ads** চাপুন। যে Google ইউজার Ads অ্যাকাউন্টে অ্যাক্সেস পান তা দিয়ে সাইন-ইন করুন। তারপর **Discover accounts** চাপুন।
 4. **Accounts** পাতায় শুধু সেই অ্যাকাউন্টগুলো **চালু (on)** করুন যা AI ব্যবহার করতে পারবে (যেমন `3010086756`)। ডিফল্টভাবে AI কিছুই দেখে না।
 5. **Diagnostics** পাতায় সব সবুজ কিনা দেখুন।
 
 ## ধাপ ৬ — AI অ্যাপ যুক্ত করুন
 
-- **Claude (ওয়েব/ডেস্কটপ):** Settings → **Connectors** → **Add custom connector** → URL দিন: `https://nodi-ads.<…>.workers.dev/mcp`। Claude নিজেকে রেজিস্টার করবে; ড্যাশবোর্ডে সাইন-ইন থাকলে আপনি একটি অনুমতি-পাতা দেখবেন — **Allow** চাপুন। (Claude Desktop-এর কনফিগ ফাইলে রিমোট সার্ভার চলে না; Connectors ব্যবহার করুন।)
-- **Claude Code:** `claude mcp add --transport http nodi-ads https://nodi-ads.<…>.workers.dev/mcp` — অথবা ড্যাশবোর্ডের **AI access** পাতায় টোকেন বানিয়ে `--header "Authorization: Bearer <টোকেন>"` ব্যবহার করুন।
+- **Claude (ওয়েব/ডেস্কটপ):** Settings → **Connectors** → **Add custom connector** → URL দিন: `https://nova-ads-console.<…>.workers.dev/mcp`। Claude নিজেকে রেজিস্টার করবে; ড্যাশবোর্ডে সাইন-ইন থাকলে আপনি একটি অনুমতি-পাতা দেখবেন — **Allow** চাপুন। (Claude Desktop-এর কনফিগ ফাইলে রিমোট সার্ভার চলে না; Connectors ব্যবহার করুন।)
+- **Claude Code:** `claude mcp add --transport http nova-ads https://nova-ads-console.<…>.workers.dev/mcp` — অথবা ড্যাশবোর্ডের **AI access** পাতায় টোকেন বানিয়ে `--header "Authorization: Bearer <টোকেন>"` ব্যবহার করুন।
 
 শুরুতে শুধু `read` ও `draft` অনুমতি দিন। `apply` তখনই দিন, যখন চান AI আপনার **অনুমোদিত** পরিকল্পনা চালাক। কোনো AI অনুমতি দিয়েই পরিকল্পনা **অনুমোদন** করা যায় না।
 
@@ -105,7 +105,7 @@
 
 | লক্ষণ | কারণ / সমাধান |
 |---|---|
-| বিল্ড Worker-এর নাম নিয়ে ভুল দেখায় | Cloudflare-এ নাম অবশ্যই `nodi-ads-cloudflare` |
+| বিল্ড Worker-এর নাম নিয়ে ভুল দেখায় | Cloudflare-এ নাম অবশ্যই `nova-ads-console` |
 | বিল্ড D1 নিয়ে ভুল দেখায় | ধাপ ২-এর D1 অংশ দেখুন (`database_id` দিন) |
 | `redirect_uri_mismatch` | Google Cloud-এর URI ও ড্যাশবোর্ডে দেখানো URI এক অক্ষরও আলাদা |
 | প্রায় এক সপ্তাহ পর `credentials_expired` | অ্যাপ এখনও Testing মোডে; Production-এ প্রকাশ করে আবার Connect করুন |
