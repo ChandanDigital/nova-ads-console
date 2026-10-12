@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // @ts-expect-error browser ES modules without type declarations
 import { state } from "../public/core.js";
 // @ts-expect-error browser ES modules without type declarations
-import { viewAccounts, viewApprovals, viewConsent, viewAi, viewOverview } from "../public/views-main.js";
+import { viewAccounts, viewPlans, viewConsent, viewAi, viewOverview } from "../public/views-main.js";
 // @ts-expect-error browser ES modules without type declarations
 import { viewLogin, viewSetup } from "../public/views-auth.js";
 
@@ -32,11 +32,11 @@ beforeEach(() => {
 });
 
 const PLAN = {
-  status: "awaiting_approval",
+  status: "ready",
+  ready_to_run: true,
   plan_hash: "h".repeat(64),
   validated_at: 1,
   validation: { validate_only: true },
-  approval: null,
   plan: {
     account: { name: "Clinic", customer_id: "3010086756", currency: "INR", timezone: "Asia/Kolkata" },
     required_permissions: ["optimisation", "budget_change"],
@@ -46,11 +46,11 @@ const PLAN = {
   },
 };
 
-describe("approval screen", () => {
-  it("shows exactly what changes and posts the approval with hash, permissions, expiry and typed word", async () => {
+describe("plan screen", () => {
+  it("shows exactly what changes and runs the plan only after a confirmation", async () => {
     routes["GET /api/plans/abc"] = () => PLAN;
-    routes["POST /api/plans/abc/approve"] = () => ({ ok: true });
-    await viewApprovals(root(), "abc");
+    routes["POST /api/plans/abc/execute"] = () => ({ status: "succeeded" });
+    await viewPlans(root(), "abc");
     await tick();
     const text = root().textContent!;
     expect(text).toContain("200000000");
@@ -58,23 +58,25 @@ describe("approval screen", () => {
     expect(text).toContain("+50%");
     expect(text).toContain("Profitable and budget-limited");
     expect(text).toContain("h".repeat(64));
+    expect(text).not.toMatch(/approv/i);
+    expect([...root().querySelectorAll("input")].some((i) => (i as HTMLInputElement).placeholder === "APPROVE")).toBe(false);
 
-    const approve = [...root().querySelectorAll("button")].find((b) => b.textContent === "Approve this exact plan")!;
-    // Without the typed word the server must refuse; the UI still sends what the human typed, never a hard-coded value.
-    (root().querySelector("#approve-typed") as HTMLInputElement).value = "APPROVE";
-    (root().querySelector("#approve-secs") as HTMLSelectElement).value = "900";
-    (root().querySelector("#perm-budget_change") as HTMLInputElement).checked = false;
-    await click(approve);
-    const post = calls.find((c) => c.path === "/api/plans/abc/approve")!;
+    // declining the confirmation sends nothing
+    vi.stubGlobal("confirm", () => false);
+    await click(root().querySelector("#run-plan"));
+    expect(calls.some((c) => c.path === "/api/plans/abc/execute")).toBe(false);
+    // accepting sends one POST with the CSRF token and no body to tamper with
+    vi.stubGlobal("confirm", () => true);
+    await click(root().querySelector("#run-plan"));
+    const post = calls.find((c) => c.path === "/api/plans/abc/execute")!;
     expect(post.method).toBe("POST");
     expect(post.headers["x-csrf-token"]).toBe("csrf-token-1");
-    expect(post.body).toEqual({ hash: "h".repeat(64), permissions: ["optimisation"], seconds: 900, confirmation: "APPROVE" });
   });
 
   it("shows a recommendation action in plain words, with a print button that carries no inline script", async () => {
-    const plan = { ...PLAN, plan: { ...PLAN.plan, required_permissions: ["apply_recommendation"], operations: [{ id: "rec0", kind: "recommendation", action: "apply", resource_name: "customers/3010086756/recommendations/kw1", field_mask: [], before: {}, payload: {}, evidence: { type: "KEYWORD", campaign: "customers/3010086756/campaigns/11" }, reason: "Google suggests it", spending_effect: "Google applies this KEYWORD recommendation as Google generated it.", recovery: "Nodi cannot undo it." }] } };
+    const plan = { ...PLAN, plan: { ...PLAN.plan, required_permissions: ["apply_recommendation"], operations: [{ id: "rec0", kind: "recommendation", action: "apply", resource_name: "customers/3010086756/recommendations/kw1", field_mask: [], before: {}, payload: {}, evidence: { type: "KEYWORD", campaign: "customers/3010086756/campaigns/11" }, reason: "Google suggests it", spending_effect: "Google applies this KEYWORD recommendation as Google generated it.", recovery: "Nova Ads cannot undo it." }] } };
     routes["GET /api/plans/rec"] = () => plan;
-    await viewApprovals(root(), "rec");
+    await viewPlans(root(), "rec");
     await tick();
     expect(root().textContent).toContain("APPLY Google recommendation KEYWORD");
     expect(root().textContent).toContain("apply_recommendation");
@@ -83,21 +85,24 @@ describe("approval screen", () => {
     expect(print.hasAttribute("onclick")).toBe(false);
   });
 
-  it("does not offer approval when the plan is not awaiting approval", async () => {
-    routes["GET /api/plans/abc"] = () => ({ ...PLAN, status: "draft" });
-    await viewApprovals(root(), "abc");
+  it("offers 'run now' only for a validated plan, and validation or cancel for a draft", async () => {
+    routes["GET /api/plans/abc"] = () => ({ ...PLAN, status: "draft", ready_to_run: false });
+    await viewPlans(root(), "abc");
     await tick();
-    expect([...root().querySelectorAll("button")].some((b) => b.textContent === "Approve this exact plan")).toBe(false);
-    expect([...root().querySelectorAll("button")].some((b) => b.textContent === "Validate again with Google")).toBe(true);
-  });
-
-  it("offers 'run now' only when an approval is active", async () => {
-    routes["GET /api/plans/abc"] = () => ({ ...PLAN, approval: { active: true, approved_at: 1, expires_at: 2, permissions: ["optimisation"], revoked: false } });
-    await viewApprovals(root(), "abc");
+    let labels = [...root().querySelectorAll("button")].map((b) => b.textContent);
+    expect(labels).not.toContain("Run this plan now");
+    expect(labels).toContain("Validate again with Google");
+    expect(labels).toContain("Cancel plan");
+    routes["GET /api/plans/abc"] = () => PLAN;
+    await viewPlans(root(), "abc");
     await tick();
-    const labels = [...root().querySelectorAll("button")].map((b) => b.textContent);
-    expect(labels).toContain("Run approved plan now");
-    expect(labels).toContain("Revoke approval");
+    labels = [...root().querySelectorAll("button")].map((b) => b.textContent);
+    expect(labels).toContain("Run this plan now");
+    // an old validation (past 30 minutes) is not runnable
+    routes["GET /api/plans/abc"] = () => ({ ...PLAN, ready_to_run: false });
+    await viewPlans(root(), "abc");
+    await tick();
+    expect([...root().querySelectorAll("button")].map((b) => b.textContent)).not.toContain("Run this plan now");
   });
 
   it("renders hostile text from Google or an AI as plain text, never as HTML", async () => {
@@ -107,7 +112,7 @@ describe("approval screen", () => {
     plan.plan.operations[0].reason = evil;
     plan.plan.operations[0].spending_effect = evil;
     routes["GET /api/plans/abc"] = () => plan;
-    await viewApprovals(root(), "abc");
+    await viewPlans(root(), "abc");
     await tick();
     expect(root().querySelector("img")).toBeNull();
     expect(root().querySelector("script")).toBeNull();
