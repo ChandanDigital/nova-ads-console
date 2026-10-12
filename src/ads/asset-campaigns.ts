@@ -68,7 +68,7 @@ export const assetCampaignOperations = (spec: AssetCampaignSpec, account: PlanAc
   }
   for (const loc of spec.locations) if (!/^geoTargetConstants\/\d+$/.test(loc)) throw new NodiError("invalid_location", "Use geoTargetConstants/<id> resources (see search_geo_targets).", 400);
 
-  const name = `${spec.name} [Nodi ${planTag}]`;
+  const name = `${spec.name} [Nova ${planTag}]`;
   add("budget", "campaign_budget", { resourceName: budgetRn, name: `${name} budget`, amountMicros: amount.toString(), deliveryMethod: "STANDARD", explicitlyShared: false });
 
   const cp: Record<string, any> = {
