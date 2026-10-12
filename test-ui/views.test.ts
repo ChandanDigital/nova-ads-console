@@ -137,7 +137,7 @@ describe("accounts screen", () => {
 
 describe("consent screen for AI apps", () => {
   it("shows who is asking and where it returns, and submits only the scopes and accounts the human left ticked", async () => {
-    routes["GET /api/oauth/pending/req1"] = () => ({ client: { name: "Claude", id: "nodi_c_1", redirect_host: "claude.ai" }, requested_scopes: ["read", "draft", "apply"], allowed_accounts: [{ customer_id: "3010086756", name: "Clinic" }, { customer_id: "1112223334", name: "Other" }] });
+    routes["GET /api/oauth/pending/req1"] = () => ({ client: { name: "Claude", id: "nova_c_1", redirect_host: "claude.ai" }, requested_scopes: ["read", "draft", "apply"], allowed_accounts: [{ customer_id: "3010086756", name: "Clinic" }, { customer_id: "1112223334", name: "Other" }] });
     routes["POST /api/oauth/pending/req1/decision"] = () => ({ redirect: "about:blank#done" });
     await viewConsent(root(), "req1");
     await tick();
@@ -163,7 +163,7 @@ describe("AI access screen", () => {
   it("creates a token with only the ticked scopes and shows it once", async () => {
     routes["GET /api/tokens"] = () => [];
     routes["GET /api/mcp-info"] = () => ({ mcp_url: "https://x.example/mcp", transport: "t", discovery: ["https://x.example/.well-known/oauth-protected-resource"] });
-    routes["POST /api/tokens"] = (b) => ({ token: "nodi_api_SECRET", scopes: b.scopes });
+    routes["POST /api/tokens"] = (b) => ({ token: "nova_api_SECRET", scopes: b.scopes });
     await viewAi(root());
     await tick();
     (root().querySelector("#tok-label") as HTMLInputElement).value = "laptop";
@@ -173,20 +173,20 @@ describe("AI access screen", () => {
     await tick(80);
     const post = calls.find((c) => c.method === "POST" && c.path === "/api/tokens")!;
     expect(post.body).toEqual({ label: "laptop", scopes: ["read", "apply"], days: 30 });
-    expect(root().textContent).toContain("nodi_api_SECRET");
+    expect(root().textContent).toContain("nova_api_SECRET");
     expect(root().textContent).toContain("shown once");
   });
 });
 
 describe("sign-in screens", () => {
   it("setup: the credential is shown once and Continue stays disabled until the box is ticked", async () => {
-    routes["POST /api/auth/setup"] = () => ({ credential: "nodi_admin_ONLYONCE", csrf: "c2" });
+    routes["POST /api/auth/setup"] = () => ({ credential: "nova_admin_ONLYONCE", csrf: "c2" });
     const done = vi.fn();
     viewSetup(root(), () => {}, done);
     (root().querySelector("#setup-secret") as HTMLInputElement).value = "my-setup-secret";
     root().querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
     await tick(60);
-    expect(root().textContent).toContain("nodi_admin_ONLYONCE");
+    expect(root().textContent).toContain("nova_admin_ONLYONCE");
     const go = [...root().querySelectorAll("button")].find((b) => b.textContent === "Continue") as HTMLButtonElement;
     expect(go.disabled).toBe(true);
     const box = root().querySelector("#saved") as HTMLInputElement;
@@ -202,10 +202,10 @@ describe("sign-in screens", () => {
     routes["POST /api/auth/login"] = () => ({ ok: true, csrf: "c3" });
     const done = vi.fn();
     viewLogin(root(), () => {}, done, () => {});
-    (root().querySelector("#credential") as HTMLInputElement).value = "  nodi_admin_abc  ";
+    (root().querySelector("#credential") as HTMLInputElement).value = "  nova_admin_abc  ";
     root().querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
     await tick(60);
-    expect(calls[0]!.body).toEqual({ credential: "nodi_admin_abc" });
+    expect(calls[0]!.body).toEqual({ credential: "nova_admin_abc" });
     expect(done).toHaveBeenCalled();
   });
   it("a failed login shows the server's message instead of crashing", async () => {
