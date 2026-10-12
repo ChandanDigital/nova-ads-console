@@ -25,23 +25,17 @@ describe("apply and dismiss Google recommendations", () => {
   });
   afterEach(() => fake.restore());
 
-  const approve = async (planId: string, hash: string, perms: string[]) =>
-    (await call(`/api/plans/${planId}/approve`, { method: "POST", session: s, body: { hash, permissions: perms, seconds: 3600, confirmation: "APPROVE" } })).status;
-
-  it("apply: draft, re-check, human approval, one all-or-nothing Google call, verified", async () => {
+  it("apply: draft, re-check, one all-or-nothing Google call, verified", async () => {
     const r = await mcpTool(draft, "create_recommendation_plan", { account_id: CUSTOMER, action: "apply", recommendations: ["kw1", rn("kw2")], reason: "Google suggests better ads and I reviewed it" });
     expect(r.isError, JSON.stringify(r.body)).toBe(false);
-    const { plan_id, plan_hash, required_permissions } = r.body.data;
+    const { plan_id, required_permissions } = r.body.data;
     expect(required_permissions).toEqual(["apply_recommendation"]);
     const v = await mcpTool(draft, "validate_change_plan", { plan_id });
-    expect(v.body.status).toBe("awaiting_approval");
+    expect(v.body.status).toBe("ready");
     // Google has no validate-only mode here, so nothing may be sent to the mutate endpoint, and the data says so.
     expect(validateMutates(fake).length).toBe(0);
     expect(v.body.data.validation.google_validate_only).toBe(false);
-    // Without a human approval the AI cannot run it.
-    expect((await mcpTool(apply, "execute_authorised_plan", { plan_id })).body.status).toBe("awaiting_approval");
     expect(fake.callsTo("recommendations:apply").length).toBe(0);
-    expect(await approve(plan_id, plan_hash, required_permissions)).toBe(200);
     const ex = await mcpTool(apply, "execute_authorised_plan", { plan_id });
     expect(ex.body.status, JSON.stringify(ex.body)).toBe("succeeded");
     const sent = fake.callsTo("recommendations:apply");
@@ -54,14 +48,11 @@ describe("apply and dismiss Google recommendations", () => {
     expect(fake.callsTo("recommendations:apply").length).toBe(1);
   });
 
-  it("dismiss needs its own permission class and verifies the dismissed flag", async () => {
+  it("dismiss is its own kind of change and verifies the dismissed flag", async () => {
     const r = await mcpTool(draft, "create_recommendation_plan", { account_id: CUSTOMER, action: "dismiss", recommendations: ["kw1"], reason: "Not relevant to this business" });
-    const { plan_id, plan_hash, required_permissions } = r.body.data;
+    const { plan_id, required_permissions } = r.body.data;
     expect(required_permissions).toEqual(["dismiss_recommendation"]);
     await mcpTool(draft, "validate_change_plan", { plan_id });
-    // approving with the wrong class is refused
-    expect(await approve(plan_id, plan_hash, ["apply_recommendation"])).toBe(400);
-    expect(await approve(plan_id, plan_hash, required_permissions)).toBe(200);
     const ex = await mcpTool(apply, "execute_authorised_plan", { plan_id });
     expect(ex.body.status).toBe("succeeded");
     expect(fake.resources.get(rn("kw1"))!.dismissed).toBe(true);
@@ -95,9 +86,8 @@ describe("apply and dismiss Google recommendations", () => {
 
   it("Google accepting the call but changing nothing is reported as outcome_unknown, never as success", async () => {
     const r = await mcpTool(draft, "create_recommendation_plan", { account_id: CUSTOMER, action: "apply", recommendations: ["kw1"], reason: "test reason" });
-    const { plan_id, plan_hash, required_permissions } = r.body.data;
+    const { plan_id, required_permissions } = r.body.data;
     await mcpTool(draft, "validate_change_plan", { plan_id });
-    await approve(plan_id, plan_hash, required_permissions);
     fake.recommendNoEffect = true;
     const ex = await mcpTool(apply, "execute_authorised_plan", { plan_id });
     expect(ex.body.status).toBe("outcome_unknown");
@@ -111,9 +101,8 @@ describe("apply and dismiss Google recommendations", () => {
 
   it("a Google error leaves the plan failed and is not retried", async () => {
     const r = await mcpTool(draft, "create_recommendation_plan", { account_id: CUSTOMER, action: "apply", recommendations: ["kw1"], reason: "test reason" });
-    const { plan_id, plan_hash, required_permissions } = r.body.data;
+    const { plan_id, required_permissions } = r.body.data;
     await mcpTool(draft, "validate_change_plan", { plan_id });
-    await approve(plan_id, plan_hash, required_permissions);
     fake.recommendFailure = { status: 400, body: { error: { code: 400, message: "bad", details: [{ errors: [{ errorCode: { recommendationError: "INVALID_ARGUMENT" }, message: "cannot apply" }] }] } } };
     const ex = await mcpTool(apply, "execute_authorised_plan", { plan_id });
     expect(ex.body.status).toBe("failed");
@@ -122,9 +111,8 @@ describe("apply and dismiss Google recommendations", () => {
 
   it("the global stop blocks it and recovery plans are not offered", async () => {
     const r = await mcpTool(draft, "create_recommendation_plan", { account_id: CUSTOMER, action: "apply", recommendations: ["kw1"], reason: "test reason" });
-    const { plan_id, plan_hash, required_permissions } = r.body.data;
+    const { plan_id, required_permissions } = r.body.data;
     await mcpTool(draft, "validate_change_plan", { plan_id });
-    await approve(plan_id, plan_hash, required_permissions);
     await call("/api/settings/global-stop", { method: "POST", session: s, body: { stop: true } });
     const blocked = await mcpTool(apply, "execute_authorised_plan", { plan_id });
     expect(blocked.body.errors[0].code).toBe("stopped");
@@ -135,7 +123,7 @@ describe("apply and dismiss Google recommendations", () => {
     expect(rec.body.errors[0].code).toBe("recovery_unavailable");
   });
 
-  it("read-only tokens cannot draft, and an AI cannot approve", async () => {
+  it("read-only tokens cannot draft", async () => {
     const read = await issueToken(s, ["read"]);
     const r = await mcpTool(read, "create_recommendation_plan", { account_id: CUSTOMER, action: "apply", recommendations: ["kw1"], reason: "test reason" });
     expect(r.isError).toBe(true);
