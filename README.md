@@ -1,6 +1,8 @@
-# Nodi Ads Cloud
+# Nova Ads Console (cloud edition)
 
 A remote **MCP server**, **OAuth server** and **management dashboard** for Google Ads that runs on the **Cloudflare free plan** and is deployed from a **private GitHub repository**. It is the cloud edition of the local Python plugin "Nodi Ads" (0.2.0).
+
+© 2026 Chandan Digital. Maintained and developed by [Chandan Digital](https://chandandigital.com/).
 
 - Read tools (accounts, campaign reports, keywords, search terms, audit, keyword research) work immediately after you connect Google.
 - Changes (new campaigns, budget, pause/enable, ad groups, keywords) are **drafted by AI, validated by Google, approved by a human in the dashboard, then executed**. No AI credential can approve anything.
