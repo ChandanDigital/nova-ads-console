@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { Db, ensureSchema, now } from "./lib/db";
 import type { Ctx } from "./lib/context";
-import { NodiError, toErrorBody } from "./lib/errors";
+import { NovaError, toErrorBody } from "./lib/errors";
 import { errorResponse, ipHash, json, publicOrigin, withSecurityHeaders } from "./lib/http";
 import { enforceQuota } from "./lib/usage";
 import { setSetting } from "./lib/settings";
@@ -73,7 +73,7 @@ export default {
         try {
           await enforceQuota(env, db, "requests");
         } catch (e) {
-          if (e instanceof NodiError) return finish(json({ error: toErrorBody(e) }, 429, { "retry-after": "3600", ...CORS }));
+          if (e instanceof NovaError) return finish(json({ error: toErrorBody(e) }, 429, { "retry-after": "3600", ...CORS }));
           throw e;
         }
       }
