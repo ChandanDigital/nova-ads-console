@@ -9,9 +9,9 @@ Use this only if you refuse Cloudflare entirely.
 | Free | yes (Actions minutes on a private repo: 2,000/month on the Free plan) | yes |
 | Weekly read-only Google Ads report (cost, clicks, conversions, campaigns, wasteful search terms, tracking check) | **yes** | yes |
 | **Always-available remote MCP server** | **no** | yes |
-| Dashboard, sign-in, approvals, plans, campaign changes | **no** | yes |
+| Dashboard, sign-in, plans, campaign changes | **no** | yes |
 | AI can ask questions "right now" | **no** (only the last scheduled report) | yes |
-| Can change your Google Ads account | **never** | only with human approval |
+| Can change your Google Ads account | **never** | only through a validated plan |
 
 Why: a GitHub Actions job starts on a schedule, runs for minutes and disappears; it cannot listen for requests. GitHub Pages serves static files only and, on the free plan, only from **public** repositories, which must not hold account data.
 
