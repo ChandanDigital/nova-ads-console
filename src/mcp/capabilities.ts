@@ -42,7 +42,7 @@ export const capabilityList = (): Capability[] => {
 };
 
 export const capabilitySummary = (env: Env) => ({
-  product: "nova-ads-cloud",
+  product: "nova-ads-console",
   version: "0.3.0",
   release_state: "release candidate; no live Google account verification",
   api: { transport: "Google Ads REST API", version: adsVersion(env), developer_token: "not required (retired 9 Sep 2026); access follows the OAuth client's Google Cloud project" },
