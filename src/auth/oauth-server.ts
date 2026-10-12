@@ -90,8 +90,8 @@ export const registerClient = async (ctx: Ctx, body: Record<string, unknown>): P
   const method = String(body.token_endpoint_auth_method ?? "none");
   if (!["none", "client_secret_post", "client_secret_basic"].includes(method)) return oauthError("invalid_client_metadata", "Unsupported token_endpoint_auth_method.");
   const name = String(body.client_name ?? "MCP client").replace(/[\u0000-\u001f<>]/g, "").slice(0, 80) || "MCP client";
-  const clientId = "nodi_c_" + randomToken(16);
-  const secret = method === "none" ? null : "nodi_cs_" + randomToken(32);
+  const clientId = "nova_c_" + randomToken(16);
+  const secret = method === "none" ? null : "nova_cs_" + randomToken(32);
   const t = now();
   await ctx.db.run("INSERT INTO oauth_clients (client_id, secret_hash, name, redirect_uris, auth_method, created_at) VALUES (?,?,?,?,?,?)", clientId, secret ? await sha256Hex("client-secret:" + secret) : null, name, JSON.stringify(redirects), method, t);
   await audit(ctx.db, { actor_type: "oauth", actor_id: clientId, action: "oauth_client_registered", outcome: "ok", detail: { name }, ip_hash: ctx.ipHash });
@@ -182,7 +182,7 @@ export const decide = async (ctx: Ctx, adminId: string, id: string, body: { appr
   const chosen = Array.isArray(body.scopes) ? (body.scopes as string[]).filter((s) => requested.includes(s)) : requested;
   if (!chosen.length) throw new NodiError("invalid_scope", "Choose at least one permission.", 400);
   const accounts = parseAccounts(body.accounts ?? null);
-  const code = "nodi_ac_" + randomToken(32);
+  const code = "nova_ac_" + randomToken(32);
   await ctx.db.run(
     "INSERT INTO oauth_codes (code_hash, client_id, redirect_uri, code_challenge, scopes, resource, grant_id, accounts, expires_at) VALUES (?,?,?,?,?,?,?,?,?)",
     await tokenHash(code), row.client_id, row.redirect_uri, row.code_challenge, JSON.stringify(chosen), row.resource, randomId(), accounts ? JSON.stringify(accounts) : null, now() + CODE_TTL,
@@ -231,8 +231,8 @@ const authenticateClient = async (ctx: Ctx, form: URLSearchParams): Promise<Clie
 };
 
 const issuePair = async (ctx: Ctx, grantId: string, clientId: string, scopes: string[], accounts: string | null, label: string) => {
-  const access = "nodi_at_" + randomToken(32);
-  const refresh = "nodi_rt_" + randomToken(32);
+  const access = "nova_at_" + randomToken(32);
+  const refresh = "nova_rt_" + randomToken(32);
   const t = now();
   await ctx.db.batch([
     { sql: "INSERT INTO api_tokens (id, kind, token_hash, label, client_id, grant_id, scopes, accounts, created_at, expires_at) VALUES (?, 'oauth_access', ?, ?, ?, ?, ?, ?, ?, ?)", params: [randomId(), await tokenHash(access), label, clientId, grantId, JSON.stringify(scopes), accounts, t, t + ACCESS_TTL] },
