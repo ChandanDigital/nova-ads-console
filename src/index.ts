@@ -51,7 +51,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    if (path === "/healthz") return json({ ok: true, service: "nodi-ads", version: "0.3.0" });
+    if (path === "/healthz") return json({ ok: true, service: "nova-ads-console", version: "0.3.0" });
 
     const dynamic = path.startsWith("/api/") || path.startsWith("/oauth/") || path.startsWith("/.well-known/") || path === "/mcp" || path.startsWith("/mcp/");
     if (!dynamic) return withSecurityHeaders(await env.ASSETS.fetch(request));
