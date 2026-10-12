@@ -1,7 +1,7 @@
 import type { Ctx, Principal } from "../lib/context";
 import { AI_SCOPES } from "../lib/context";
 import { now } from "../lib/db";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { randomId, randomToken, sha256Hex } from "../lib/crypto";
 import { audit } from "../lib/audit";
 import { customerId } from "../google/gaql";
@@ -25,24 +25,24 @@ export interface TokenInfo {
 const parseScopes = (input: unknown): string[] => {
   const scopes = Array.isArray(input) ? input.map(String) : String(input ?? "read").split(/[\s,]+/).filter(Boolean);
   if (!scopes.length || scopes.some((s) => !(AI_SCOPES as readonly string[]).includes(s))) {
-    throw new NodiError("invalid_scope", "AI tokens may hold only read, draft and apply. No token can approve plans or manage credentials.", 400);
+    throw new NovaError("invalid_scope", "AI tokens may hold only read, draft and apply. No token can manage credentials or settings.", 400);
   }
   return [...new Set(scopes)];
 };
 
 export const parseAccounts = (input: unknown): string[] | null => {
   if (input === null || input === undefined) return null;
-  if (!Array.isArray(input)) throw new NodiError("invalid_input", "accounts must be a list of customer IDs.", 400);
+  if (!Array.isArray(input)) throw new NovaError("invalid_input", "accounts must be a list of customer IDs.", 400);
   return [...new Set(input.map(customerId))];
 };
 
 /** Issues a manually created API token (for hosts that accept a pasted Authorization header, e.g. Claude Code). Shown once. */
 export const issueApiToken = async (ctx: Ctx, adminId: string, input: { label?: unknown; scopes?: unknown; accounts?: unknown; days?: unknown }) => {
   const label = String(input.label ?? "").trim().slice(0, 60);
-  if (!label) throw new NodiError("invalid_input", "Give the token a label.", 400);
+  if (!label) throw new NovaError("invalid_input", "Give the token a label.", 400);
   const scopes = parseScopes(input.scopes);
   const days = Number(input.days ?? 30);
-  if (!Number.isInteger(days) || days < 1 || days > 365) throw new NodiError("invalid_expiry", "Choose 1 to 365 days.", 400);
+  if (!Number.isInteger(days) || days < 1 || days > 365) throw new NovaError("invalid_expiry", "Choose 1 to 365 days.", 400);
   const accounts = parseAccounts(input.accounts);
   const token = "nova_api_" + randomToken(32);
   const id = randomId();
@@ -65,7 +65,7 @@ export const listTokens = async (ctx: Ctx): Promise<TokenInfo[]> => {
 
 export const revokeToken = async (ctx: Ctx, adminId: string, id: string): Promise<{ revoked: number }> => {
   const row = await ctx.db.first<{ grant_id: string | null }>("SELECT grant_id FROM api_tokens WHERE id = ?", id);
-  if (!row) throw new NodiError("not_found", "No such token.", 404);
+  if (!row) throw new NovaError("not_found", "No such token.", 404);
   const t = now();
   const n = row.grant_id
     ? await ctx.db.run("UPDATE api_tokens SET revoked_at = ? WHERE grant_id = ? AND revoked_at IS NULL", t, row.grant_id)
