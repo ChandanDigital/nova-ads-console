@@ -13,8 +13,8 @@ export interface AuditEntry {
 
 // Anything that looks like one of our secrets or a Google token is masked before it can reach the log.
 const SECRET_PATTERNS: RegExp[] = [
-  /nodi_admin_[A-Za-z0-9_-]{20,}/g,
-  /nodi_(?:api|at|rt)_[A-Za-z0-9_-]{20,}/g,
+  /nova_admin_[A-Za-z0-9_-]{20,}/g,
+  /nova_(?:api|at|rt)_[A-Za-z0-9_-]{20,}/g,
   /ya29\.[A-Za-z0-9_-]{10,}/g,
   /1\/\/[A-Za-z0-9_-]{20,}/g,
   /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/gi,
