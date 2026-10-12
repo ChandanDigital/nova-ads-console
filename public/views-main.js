@@ -232,7 +232,7 @@ export const viewAi = (root) => load(root, async () => {
   const create = guard(async (e) => {
     e.preventDefault();
     const r = await api("POST", "/api/tokens", { label: label.value, scopes: scopes.filter((s) => s.checked).map((s) => s.value), days: Number(days.value) });
-    mount(shown, callout("ok", h("strong", {}, t("ai_shownOnce")), h("div", { class: "secret-box" }, r.token), h("div", { class: "row" }, copyButton(r.token), copyButton(`claude mcp add --transport http nodi-ads ${info.mcp_url} --header "Authorization: Bearer ${r.token}"`, "Copy Claude Code command"))));
+    mount(shown, callout("ok", h("strong", {}, t("ai_shownOnce")), h("div", { class: "secret-box" }, r.token), h("div", { class: "row" }, copyButton(r.token), copyButton(`claude mcp add --transport http nova-ads ${info.mcp_url} --header "Authorization: Bearer ${r.token}"`, "Copy Claude Code command"))));
     viewAiList();
   });
   const listBox = h("div");
@@ -250,7 +250,7 @@ export const viewAi = (root) => load(root, async () => {
     section(t("ai_url"), h("div", { class: "row" }, h("code", {}, info.mcp_url), copyButton(info.mcp_url)), h("p", { class: "muted small" }, info.transport),
       h("details", { open: true }, h("summary", {}, "How to connect"), h("ul", {},
         h("li", {}, "Claude (web/desktop): Settings → Connectors → Add custom connector → paste the URL above → sign in here when asked and approve."),
-        h("li", {}, "Claude Code: ", h("code", {}, `claude mcp add --transport http nodi-ads ${info.mcp_url}`), " then /mcp to sign in, or use a token below."),
+        h("li", {}, "Claude Code: ", h("code", {}, `claude mcp add --transport http nova-ads ${info.mcp_url}`), " then /mcp to sign in, or use a token below."),
         h("li", {}, "ChatGPT / Gemini CLI / others: add a remote MCP server with this URL. OAuth discovery: ", h("code", {}, info.discovery[0]))))),
     section(t("ai_newToken"), h("form", { class: "stack", onsubmit: create }, field(t("ai_label"), label), h("div", { class: "checks" }, h("strong", {}, t("ai_scopes")), scopes.map((s) => h("label", {}, s, s.value)), h("div", { class: "small muted" }, t("ai_scopeHelp"))), field(t("ai_days"), days), h("button", { class: "primary", type: "submit" }, t("ai_create"))), shown),
     section(t("ai_tokens"), listBox, h("div", { class: "row" }, h("button", { class: "danger", onclick: guard(async () => { if (!confirmBox(t("ai_revokeAll") + "?")) return; await api("POST", "/api/tokens/revoke-all"); viewAiList(); toast("Done"); }) }, t("ai_revokeAll")))));
@@ -312,7 +312,7 @@ export const viewConsent = (root, id) => load(root, async () => {
   });
   return h("div", { class: "auth" }, h("div", { class: "card stack" },
     h("h1", {}, h("span", { class: "logo" }, "N"), "Allow this AI app?"),
-    callout("info", h("strong", {}, d.client.name), ` wants to connect to Nodi Ads. It will return to: `, h("code", {}, d.client.redirect_host)),
+    callout("info", h("strong", {}, d.client.name), ` wants to connect to Nova Ads Console. It will return to: `, h("code", {}, d.client.redirect_host)),
     h("div", { class: "checks" }, h("strong", {}, t("ai_scopes")), scopeBoxes.map((b, i) => h("label", {}, b, d.requested_scopes[i])), h("div", { class: "small muted" }, t("ai_scopeHelp"))),
     h("div", { class: "checks" }, h("strong", {}, t("nav_accounts")), accBoxes.length ? accBoxes.map((b, i) => h("label", {}, b, `${d.allowed_accounts[i].name ?? ""} (${d.allowed_accounts[i].customer_id})`)) : h("div", { class: "muted" }, "No account is allowed yet; the app will see none.")),
     h("div", { class: "row" }, h("button", { class: "primary", onclick: decide(true) }, "Allow"), h("button", { onclick: decide(false) }, "Deny"))));
