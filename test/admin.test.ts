@@ -8,7 +8,7 @@ describe("first-time setup", () => {
   it("reports that setup is needed, then creates the administrator with the Cloudflare-held secret", async () => {
     expect((await call("/api/state")).json.needs_setup).toBe(true);
     const s = await setupAdmin();
-    expect(s.credential).toMatch(/^nodi_admin_[A-Za-z0-9_-]{40,}$/);
+    expect(s.credential).toMatch(/^nova_admin_[A-Za-z0-9_-]{40,}$/);
     expect((await call("/api/state")).json.needs_setup).toBe(false);
   });
   it("refuses a wrong setup secret", async () => {
@@ -62,13 +62,13 @@ describe("login, sessions and CSRF", () => {
   it("signs in with the credential and rejects others", async () => {
     const s = await setupAdmin();
     await expect(loginWith(s.credential!)).resolves.toBeTruthy();
-    const bad = await call("/api/auth/login", { method: "POST", body: { credential: "nodi_admin_" + "x".repeat(43) } });
+    const bad = await call("/api/auth/login", { method: "POST", body: { credential: "nova_admin_" + "x".repeat(43) } });
     expect(bad.status).toBe(401);
   });
   it("sets an HttpOnly, Secure, SameSite cookie", async () => {
     const r = await call("/api/auth/setup", { method: "POST", body: { setup_secret: SETUP_SECRET } });
     const c = r.headers.get("set-cookie")!;
-    expect(c).toContain("__Host-nodi_session=");
+    expect(c).toContain("__Host-nova_session=");
     expect(c).toContain("HttpOnly");
     expect(c).toContain("Secure");
     expect(c).toContain("SameSite=Lax");
@@ -90,7 +90,7 @@ describe("login, sessions and CSRF", () => {
   it("rate-limits repeated bad credentials", async () => {
     await setupAdmin();
     let last = 0;
-    for (let i = 0; i < 12; i++) last = (await call("/api/auth/login", { method: "POST", body: { credential: "nodi_admin_" + String(i).padStart(43, "y") } })).status;
+    for (let i = 0; i < 12; i++) last = (await call("/api/auth/login", { method: "POST", body: { credential: "nova_admin_" + String(i).padStart(43, "y") } })).status;
     expect(last).toBe(429);
   });
   it("logout ends the session", async () => {
@@ -165,7 +165,7 @@ describe("credential replacement when the original is lost", () => {
   });
   it("signed-in rotation needs the current credential", async () => {
     const s = await setupAdmin();
-    const bad = await call("/api/auth/rotate", { method: "POST", session: s, body: { credential: "nodi_admin_" + "z".repeat(43) } });
+    const bad = await call("/api/auth/rotate", { method: "POST", session: s, body: { credential: "nova_admin_" + "z".repeat(43) } });
     expect(bad.status).toBe(401);
     const ok = await call("/api/auth/rotate", { method: "POST", session: s, body: { credential: s.credential } });
     expect(ok.status).toBe(200);
