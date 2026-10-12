@@ -144,9 +144,9 @@ export class FakeGoogle {
       const rows = [...this.resources.values()].filter((r) => r.campaignBudget === eq[3]).map((r) => ({ campaign: { id: r.resourceName.split("/").pop(), name: r.name, campaignBudget: r.campaignBudget } }));
       return this.json({ results: rows });
     }
-    const like = /name LIKE '%\[Nodi ([0-9a-f]{8})\]%'/.exec(q);
+    const like = /name LIKE '%\[Nova ([0-9a-f]{8})\]%'/.exec(q);
     if (like) {
-      const results = [...this.resources.values()].filter((r) => r.resourceName.includes(`/${from === "campaign" ? "campaigns" : "campaignBudgets"}/`) && String(r.name ?? "").includes(`[Nodi ${like[1]}]`)).map((r) => ({ [this.camel(from)]: { resourceName: r.resourceName, name: r.name } }));
+      const results = [...this.resources.values()].filter((r) => r.resourceName.includes(`/${from === "campaign" ? "campaigns" : "campaignBudgets"}/`) && String(r.name ?? "").includes(`[Nova ${like[1]}]`)).map((r) => ({ [this.camel(from)]: { resourceName: r.resourceName, name: r.name } }));
       return this.json({ results });
     }
     return this.json({ results: this.cannedRows[from] ?? [] });
