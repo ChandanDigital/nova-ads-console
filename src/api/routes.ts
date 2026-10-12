@@ -1,6 +1,6 @@
 import type { Ctx, Principal } from "../lib/context";
 import { now } from "../lib/db";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { json, readJson, redirect } from "../lib/http";
 import { audit } from "../lib/audit";
 import { getSetting, setSetting } from "../lib/settings";
@@ -95,7 +95,7 @@ secured("GET", "/api/overview", async (ctx) => {
   const [conns, accounts, pending, recent, usage, stop] = await Promise.all([
     ctx.db.all<{ id: string; email: string | null; status: string; last_ok_at: number | null; last_error: string | null; created_at: number }>("SELECT id, email, status, last_ok_at, last_error, created_at FROM google_connections WHERE status != 'revoked'"),
     ctx.db.first<{ total: number; allowed: number }>("SELECT COUNT(*) AS total, COALESCE(SUM(allowed),0) AS allowed FROM accounts"),
-    ctx.db.all<{ id: string; account_id: string; created_at: number }>("SELECT id, account_id, created_at FROM plans WHERE status = 'awaiting_approval' ORDER BY created_at DESC LIMIT 20"),
+    ctx.db.all<{ id: string; account_id: string; created_at: number }>("SELECT id, account_id, created_at FROM plans WHERE status IN ('ready', 'awaiting_approval') ORDER BY created_at DESC LIMIT 20"),
     ctx.db.all<{ ts: number; action: string; outcome: string; target: string | null }>("SELECT ts, action, outcome, target FROM audit_log ORDER BY id DESC LIMIT 8"),
     usageSummary(ctx.env, ctx.db),
     getSetting(ctx.db, "global_stop"),
@@ -126,7 +126,7 @@ export const googleCallback = async (ctx: Ctx): Promise<Response> => {
     try { await discoverAccounts(ctx, r.id); } catch { /* the dashboard shows discovery errors on demand */ }
     return redirect("/#/accounts?connected=1");
   } catch (e) {
-    const codeName = e instanceof NodiError ? e.code : "error";
+    const codeName = e instanceof NovaError ? e.code : "error";
     return redirect(`/#/connections?google_error=${encodeURIComponent(codeName)}`);
   }
 };
@@ -162,19 +162,17 @@ secured("GET", "/api/accounts/:id/reports", async (ctx, p) =>
 );
 secured("GET", "/api/reports/:id", async (ctx, p) => {
   const row = await ctx.db.first<{ report_json: string }>("SELECT report_json FROM reports WHERE id = ?", p.id!);
-  if (!row) throw new NodiError("not_found", "No such report.", 404);
+  if (!row) throw new NovaError("not_found", "No such report.", 404);
   return JSON.parse(row.report_json);
 });
 
-// ---------------------------------------------------------------- plans and approval
+// ---------------------------------------------------------------- plans
 secured("GET", "/api/plans", async (ctx) =>
-  ctx.db.all("SELECT p.id, p.account_id, a.name AS account_name, p.status, p.created_by, p.created_at, p.expires_at, p.validated_at, (SELECT COUNT(*) FROM approvals x WHERE x.plan_id = p.id AND x.revoked_at IS NULL AND x.expires_at > ?) AS approved FROM plans p LEFT JOIN accounts a ON a.customer_id = p.account_id ORDER BY p.created_at DESC LIMIT 100", now()),
+  ctx.db.all("SELECT p.id, p.account_id, a.name AS account_name, p.status, p.created_by, p.created_at, p.expires_at, p.validated_at FROM plans p LEFT JOIN accounts a ON a.customer_id = p.account_id ORDER BY p.created_at DESC LIMIT 100"),
 );
 secured("GET", "/api/plans/:id", async (ctx, p, _s, pr) => X.previewPlan(ctx, pr, p.id!));
 secured("POST", "/api/plans/:id/validate", async (ctx, p, _s, pr) => X.validatePlan(ctx, pr, p.id!));
-secured("POST", "/api/plans/:id/approve", async (ctx, p, s) => X.approvePlan(ctx, s.adminId, p.id!, await readJson(ctx.request)));
-secured("POST", "/api/plans/:id/reject", async (ctx, p, s) => X.rejectPlan(ctx, s.adminId, p.id!));
-secured("POST", "/api/plans/:id/revoke-approval", async (ctx, p, s) => X.revokeApproval(ctx, s.adminId, p.id!));
+secured("POST", "/api/plans/:id/cancel", async (ctx, p, s) => X.cancelPlan(ctx, s.adminId, p.id!));
 secured("POST", "/api/plans/:id/execute", async (ctx, p, _s, pr) => X.executePlan(ctx, pr, p.id!));
 secured("POST", "/api/plans/:id/reconcile", async (ctx, p, _s, pr) => X.reconcilePlan(ctx, pr, p.id!));
 
