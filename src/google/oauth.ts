@@ -2,7 +2,7 @@ import type { Env } from "../env";
 import type { Ctx } from "../lib/context";
 import type { Db } from "../lib/db";
 import { now } from "../lib/db";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { b64uDecode, decryptText, encryptText, randomId, randomToken, sha256B64u, sha256Hex } from "../lib/crypto";
 import { audit } from "../lib/audit";
 import { sessionIdFromRequest } from "../auth/admin";
@@ -15,7 +15,7 @@ export const GOOGLE_CALLBACK_PATH = "/oauth/google/callback";
 
 const need = (env: Env) => {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
-    throw new NodiError(
+    throw new NovaError(
       "google_oauth_not_configured",
       "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are not set. Create a Web OAuth client in Google Cloud and add both as Cloudflare secrets.",
       503,
@@ -57,7 +57,7 @@ const postForm = async (url: string, form: Record<string, string>): Promise<{ st
 export const startGoogleConnect = async (ctx: Ctx): Promise<string> => {
   need(ctx.env);
   const sessionId = sessionIdFromRequest(ctx);
-  if (!sessionId) throw new NodiError("unauthenticated", "Sign in first.", 401);
+  if (!sessionId) throw new NovaError("unauthenticated", "Sign in first.", 401);
   const state = randomToken(32);
   const verifier = randomToken(48);
   const t = now();
@@ -99,13 +99,13 @@ const parseIdToken = (idToken: string | undefined): { sub?: string; email?: stri
 export const finishGoogleConnect = async (ctx: Ctx, state: string, code: string): Promise<{ id: string; email?: string }> => {
   need(ctx.env);
   const sessionId = sessionIdFromRequest(ctx);
-  if (!sessionId) throw new NodiError("unauthenticated", "Sign in to the dashboard first, then connect Google again.", 401);
+  if (!sessionId) throw new NovaError("unauthenticated", "Sign in to the dashboard first, then connect Google again.", 401);
   const row = await ctx.db.first<{ session_hash: string; verifier_sealed: string; expires_at: number }>(
     "DELETE FROM google_oauth_states WHERE state_hash = ? RETURNING session_hash, verifier_sealed, expires_at",
     await sha256Hex("gstate:" + state),
   );
   if (!row || row.expires_at < now() || row.session_hash !== (await sha256Hex("session:" + sessionId))) {
-    throw new NodiError("invalid_oauth_state", "The Google sign-in expired or came from another browser session. Start it again from the dashboard.", 400);
+    throw new NovaError("invalid_oauth_state", "The Google sign-in expired or came from another browser session. Start it again from the dashboard.", 400);
   }
   const verifier = await decryptText(ctx.env, row.verifier_sealed, "gstate:" + state);
   const { status, body } = await postForm(TOKEN_URL, {
@@ -118,10 +118,10 @@ export const finishGoogleConnect = async (ctx: Ctx, state: string, code: string)
   });
   if (status !== 200 || !body.access_token) {
     await audit(ctx.db, { actor_type: "admin", action: "google_connect", outcome: "error", detail: { status, error: body.error }, ip_hash: ctx.ipHash });
-    throw new NodiError("google_exchange_failed", `Google refused the sign-in (${body.error ?? status}). Check the OAuth client, redirect URI and consent screen.`, 502);
+    throw new NovaError("google_exchange_failed", `Google refused the sign-in (${body.error ?? status}). Check the OAuth client, redirect URI and consent screen.`, 502);
   }
   if (!body.refresh_token) {
-    throw new NodiError(
+    throw new NovaError(
       "missing_refresh_token",
       "Google did not issue a refresh token. Remove this app at myaccount.google.com/permissions and connect again.",
       400,
@@ -129,7 +129,7 @@ export const finishGoogleConnect = async (ctx: Ctx, state: string, code: string)
   }
   const scopes = (body.scope ?? "").split(" ").filter(Boolean);
   if (!scopes.includes(ADS_SCOPE)) {
-    throw new NodiError("missing_ads_scope", "Google Ads permission was not granted. Tick the Google Ads checkbox on the consent screen.", 400);
+    throw new NovaError("missing_ads_scope", "Google Ads permission was not granted. Tick the Google Ads checkbox on the consent screen.", 400);
   }
   const who = parseIdToken(body.id_token);
   const t = now();
@@ -172,8 +172,8 @@ export const getAccessToken = async (env: Env, db: Db, connectionId: string): Pr
     "SELECT id, refresh_sealed, access_sealed, access_expires_at, status FROM google_connections WHERE id = ?",
     connectionId,
   );
-  if (!c) throw new NodiError("not_connected", "This Google connection no longer exists. Connect Google in the dashboard.", 409);
-  if (c.status === "revoked") throw new NodiError("connection_revoked", "This Google connection was disconnected.", 409);
+  if (!c) throw new NovaError("not_connected", "This Google connection no longer exists. Connect Google in the dashboard.", 409);
+  if (c.status === "revoked") throw new NovaError("connection_revoked", "This Google connection was disconnected.", 409);
   const t = now();
   if (c.status === "active" && c.access_sealed && (c.access_expires_at ?? 0) > t + 60) {
     return decryptText(env, c.access_sealed, "gconn:" + c.id + ":access");
@@ -189,7 +189,7 @@ export const getAccessToken = async (env: Env, db: Db, connectionId: string): Pr
     const reason = body.error ?? String(status);
     const fatal = reason === "invalid_grant" || reason === "invalid_client" || reason === "unauthorized_client";
     await db.run("UPDATE google_connections SET status = ?, last_error = ? WHERE id = ?", fatal ? "error" : c.status, `refresh_failed:${reason}`, c.id);
-    throw new NodiError(
+    throw new NovaError(
       fatal ? "credentials_expired" : "google_token_unavailable",
       fatal
         ? "Google rejected the stored refresh token (it was revoked, or the OAuth consent screen is still in Testing mode, which expires tokens after 7 days). Reconnect Google in the dashboard."
@@ -212,7 +212,7 @@ export const getAccessToken = async (env: Env, db: Db, connectionId: string): Pr
 /** Revokes the grant at Google and marks the connection revoked (the sealed tokens are wiped). */
 export const disconnectGoogle = async (ctx: Ctx, id: string): Promise<{ google_revoked: boolean }> => {
   const c = await ctx.db.first<ConnRow>("SELECT id, refresh_sealed, access_sealed, access_expires_at, status FROM google_connections WHERE id = ?", id);
-  if (!c) throw new NodiError("not_found", "No such Google connection.", 404);
+  if (!c) throw new NovaError("not_found", "No such Google connection.", 404);
   let revoked = false;
   try {
     const token = await decryptText(ctx.env, c.refresh_sealed, "gconn:" + c.id + ":refresh");
