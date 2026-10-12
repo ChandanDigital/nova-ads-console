@@ -1,6 +1,6 @@
 import type { Ctx, Principal } from "../lib/context";
 import { now } from "../lib/db";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { audit } from "../lib/audit";
 import { getSetting } from "../lib/settings";
 import { adsFor, resolveAccount, type AccountRow } from "./accounts";
@@ -24,7 +24,7 @@ export const planAccount = (a: AccountRow): PlanAccount => ({
 /** Turns a plan into the JSON body entries for GoogleAdsService.Mutate. */
 export const compile = (plan: Plan): unknown[] =>
   plan.operations.map((op) => {
-    if (op.kind === "recommendation") throw new NodiError("invalid_plan", "Recommendation plans are not sent through the mutate endpoint.", 500);
+    if (op.kind === "recommendation") throw new NovaError("invalid_plan", "Recommendation plans are not sent through the mutate endpoint.", 500);
     const info = KINDS[op.kind]!;
     if (op.action === "create") return { [info.op]: { create: op.payload } };
     return { [info.op]: { update: { ...op.payload, resourceName: op.resource_name }, updateMask: op.field_mask.join(",") } };
@@ -66,7 +66,7 @@ export const attachBefore = async (ctx: Ctx, account: AccountRow, ops: PlanOpera
   const current = await fetchCurrent(ctx, account, ops);
   for (const op of ops.filter((o) => o.action === "update")) {
     const res = current.get(op.resource_name!);
-    if (!res) throw new NodiError("resource_missing", `Resource ${op.resource_name} was not found in this account.`, 404);
+    if (!res) throw new NovaError("resource_missing", `Resource ${op.resource_name} was not found in this account.`, 404);
     op.before = Object.fromEntries(op.field_mask.map((f) => [f, pathGet(res, f) ?? null]));
   }
 };
@@ -79,7 +79,7 @@ const guardrail = async (ctx: Ctx, ops: PlanOperation[], account: AccountRow): P
     if (op.kind !== "campaign_budget") continue;
     const v = op.payload.amountMicros;
     if (v !== undefined && BigInt(String(v)) > limit) {
-      throw new NodiError("guardrail_budget_cap", `The administrator's daily budget cap is ${(Number(limit) / 1e6).toFixed(2)} ${account.currency}. This plan asks for ${(Number(BigInt(String(v))) / 1e6).toFixed(2)}.`, 422);
+      throw new NovaError("guardrail_budget_cap", `The administrator's daily budget cap is ${(Number(limit) / 1e6).toFixed(2)} ${account.currency}. This plan asks for ${(Number(BigInt(String(v))) / 1e6).toFixed(2)}.`, 422);
     }
   }
 };
@@ -102,7 +102,7 @@ export const createCampaignPlan = async (ctx: Ctx, p: Principal, id: string, spe
   const { isAsset, input } = splitCampaignType(specInput);
   const parsed = isAsset ? AssetCampaignSpecSchema.safeParse(input) : SearchSpecSchema.safeParse(input);
   if (!parsed.success) {
-    throw new NodiError("invalid_input", "Check the campaign fields.", 400, parsed.error.issues.slice(0, 20).map((i) => ({ field: i.path.join("."), problem: i.message })));
+    throw new NovaError("invalid_input", "Check the campaign fields.", 400, parsed.error.issues.slice(0, 20).map((i) => ({ field: i.path.join("."), problem: i.message })));
   }
   const planId = crypto.randomUUID();
   const ops = isAsset ? assetCampaignOperations(parsed.data as AssetCampaignSpec, planAccount(account), planId.slice(0, 8)) : searchCampaignOperations(parsed.data as SearchSpec, planAccount(account), planId.slice(0, 8));
@@ -129,21 +129,21 @@ const describeEffect = (op: PlanOperation, currency: string): string => {
 
 export const createOptimisationPlan = async (ctx: Ctx, p: Principal, id: string, changes: unknown[], business: Record<string, unknown>) => {
   const account = await resolveAccount(ctx, p, id, "draft");
-  if (!Array.isArray(changes) || changes.length < 1 || changes.length > 100) throw new NodiError("invalid_input", "Send 1 to 100 changes.", 400);
+  if (!Array.isArray(changes) || changes.length < 1 || changes.length > 100) throw new NovaError("invalid_input", "Send 1 to 100 changes.", 400);
   const ops: PlanOperation[] = [];
   for (let i = 0; i < changes.length; i++) {
     const raw = changes[i] as Record<string, unknown>;
-    // The original Nodi Ads used snake_case field names; both spellings are accepted.
+    // The original Nova Ads Console used snake_case field names; both spellings are accepted.
     const normalized = { ...raw, payload: camelKeys(raw?.payload ?? {}), field_mask: ((raw?.field_mask as string[]) ?? []).map(camelPath), resource_name: raw?.resource_name };
     const parsed = ChangeSchema.safeParse(normalized);
-    if (!parsed.success) throw new NodiError("invalid_input", `Change ${i + 1} is not valid.`, 400, parsed.error.issues.slice(0, 10).map((x) => ({ field: x.path.join("."), problem: x.message })));
+    if (!parsed.success) throw new NovaError("invalid_input", `Change ${i + 1} is not valid.`, 400, parsed.error.issues.slice(0, 10).map((x) => ({ field: x.path.join("."), problem: x.message })));
     const c = parsed.data;
     const op: PlanOperation = {
       ...c, id: c.id ?? `change${i}`, field_mask: c.field_mask ?? [], before: {}, depends_on: c.depends_on ?? [], evidence: c.evidence ?? {},
       spending_effect: c.spending_effect ?? "pending", recovery: c.recovery ?? "Restore the previous values through a new reviewed plan. Money already spent stays spent.",
     };
     if (op.action === "create" && ["campaign", "campaign_budget", "ad_group"].includes(op.kind)) {
-      throw new NodiError("use_campaign_workflow", "Create campaigns, budgets and ad groups with create_campaign_plan so dependent resources stay consistent.", 400);
+      throw new NovaError("use_campaign_workflow", "Create campaigns, budgets and ad groups with create_campaign_plan so dependent resources stay consistent.", 400);
     }
     if (op.action === "create") {
       // New ads and keywords start paused unless the reviewer sees ENABLED.
@@ -164,7 +164,7 @@ export const createOptimisationPlan = async (ctx: Ctx, p: Principal, id: string,
         `SELECT campaign.id, campaign.name, campaign.campaign_budget FROM campaign WHERE campaign.campaign_budget = ${gaqlString(op.resource_name!)} ORDER BY campaign.id LIMIT 200`,
         200,
       );
-      if (camps.truncated) throw new NodiError("incomplete_scope", "Cannot review every campaign sharing this budget.", 400);
+      if (camps.truncated) throw new NovaError("incomplete_scope", "Cannot review every campaign sharing this budget.", 400);
       op.evidence.shared_budget_campaigns = camps.rows.map((r) => ({ id: r.campaign?.id, name: r.campaign?.name }));
     }
     if (op.spending_effect === "pending") op.spending_effect = describeEffect(op, account.currency ?? "");
@@ -181,19 +181,19 @@ const negativeEvidence = async (ctx: Ctx, account: AccountRow, op: PlanOperation
   const isNegative = op.action === "create" && (op.kind === "campaign_criterion" || op.kind === "ad_group_criterion") && op.payload.negative === true && op.payload.keyword;
   if (!isNegative) return;
   const e = op.evidence as Record<string, any>;
-  if (!e.dataset_id) throw new NodiError("negative_needs_evidence", "Read real search terms first (get_search_terms) and include the saved dataset_id in evidence.", 400);
+  if (!e.dataset_id) throw new NovaError("negative_needs_evidence", "Read real search terms first (get_search_terms) and include the saved dataset_id in evidence.", 400);
   const ds = await ctx.db.first<{ account_id: string; rows_json: string; created_at: number }>("SELECT account_id, rows_json, created_at FROM evidence WHERE id = ?", String(e.dataset_id));
-  if (!ds || ds.account_id !== account.customer_id || ds.created_at < now() - 7 * 86400) throw new NodiError("stale_evidence", "Search-term evidence is missing, stale or belongs to another account.", 400);
+  if (!ds || ds.account_id !== account.customer_id || ds.created_at < now() - 7 * 86400) throw new NovaError("stale_evidence", "Search-term evidence is missing, stale or belongs to another account.", 400);
   const rows = JSON.parse(ds.rows_json) as any[];
   const matches = rows.filter((r) => r.search_term_view?.search_term === e.search_term);
-  if (!matches.length) throw new NodiError("negative_needs_evidence", "The evidence search term does not occur in that dataset.", 400);
+  if (!matches.length) throw new NovaError("negative_needs_evidence", "The evidence search term does not occur in that dataset.", 400);
   for (const f of ["business_relevance", "overblocking_review"]) {
-    if (typeof e[f] !== "string" || e[f].trim().length < 10) throw new NodiError("negative_needs_evidence", `Explain ${f.replace("_", " ")} in at least 10 characters.`, 400);
+    if (typeof e[f] !== "string" || e[f].trim().length < 10) throw new NovaError("negative_needs_evidence", `Explain ${f.replace("_", " ")} in at least 10 characters.`, 400);
   }
   const kw = op.payload.keyword as any;
-  if (kw.matchType !== e.match_type) throw new NodiError("negative_needs_evidence", "Evidence and proposed match type differ.", 400);
+  if (kw.matchType !== e.match_type) throw new NovaError("negative_needs_evidence", "Evidence and proposed match type differ.", 400);
   const scope = (op.payload.campaign ?? op.payload.adGroup) as string;
-  if (e.scope?.resource_name !== scope) throw new NodiError("negative_needs_evidence", "Evidence scope must match the affected campaign or ad group.", 400);
+  if (e.scope?.resource_name !== scope) throw new NovaError("negative_needs_evidence", "Evidence scope must match the affected campaign or ad group.", 400);
   e.search_term_rows = matches.slice(0, 5);
 };
 
@@ -202,21 +202,21 @@ export const createBudgetChangePlan = async (ctx: Ctx, p: Principal, id: string,
   const account = await resolveAccount(ctx, p, id, "draft");
   let budget = a.budget_resource;
   if (!budget) {
-    if (!a.campaign_id || !/^\d+$/.test(a.campaign_id)) throw new NodiError("invalid_input", "Send campaign_id or budget_resource.", 400);
+    if (!a.campaign_id || !/^\d+$/.test(a.campaign_id)) throw new NovaError("invalid_input", "Send campaign_id or budget_resource.", 400);
     const r = await adsFor(ctx, account).search(account.customer_id, `SELECT campaign.id, campaign.campaign_budget FROM campaign WHERE campaign.id = ${a.campaign_id} LIMIT 1`, 1);
     budget = r.rows[0]?.campaign?.campaignBudget;
-    if (!budget) throw new NodiError("resource_missing", "Campaign not found in this account.", 404);
+    if (!budget) throw new NovaError("resource_missing", "Campaign not found in this account.", 404);
   }
   resourceValid(budget, account.customer_id, "campaign_budget");
   const micros = moneyMicros(a.new_daily_budget);
-  if (micros <= 0n) throw new NodiError("invalid_budget", "Daily budget must be positive.", 400);
+  if (micros <= 0n) throw new NovaError("invalid_budget", "Daily budget must be positive.", 400);
   return createOptimisationPlan(ctx, p, id, [{ kind: "campaign_budget", action: "update", resource_name: budget, field_mask: ["amountMicros"], payload: { amountMicros: micros.toString() }, reason: a.reason }], { source: "create_budget_change_plan" });
 };
 
 export const createStatusChangePlan = async (ctx: Ctx, p: Principal, id: string, a: { kind: "campaign" | "ad_group" | "ad_group_ad" | "ad_group_criterion"; resource_names: string[]; status: "ENABLED" | "PAUSED"; reason: string }) => {
   const account = await resolveAccount(ctx, p, id, "draft");
-  if (!["campaign", "ad_group", "ad_group_ad", "ad_group_criterion"].includes(a.kind) || !["ENABLED", "PAUSED"].includes(a.status)) throw new NodiError("invalid_input", "Choose a supported kind and ENABLED or PAUSED.", 400);
-  if (a.resource_names.length < 1 || a.resource_names.length > 50) throw new NodiError("invalid_input", "Send 1 to 50 resource names.", 400);
+  if (!["campaign", "ad_group", "ad_group_ad", "ad_group_criterion"].includes(a.kind) || !["ENABLED", "PAUSED"].includes(a.status)) throw new NovaError("invalid_input", "Choose a supported kind and ENABLED or PAUSED.", 400);
+  if (a.resource_names.length < 1 || a.resource_names.length > 50) throw new NovaError("invalid_input", "Send 1 to 50 resource names.", 400);
   for (const rn of a.resource_names) resourceValid(rn, account.customer_id, a.kind);
   const changes = a.resource_names.map((rn, i) => ({ id: `status${i}`, kind: a.kind, action: "update", resource_name: rn, field_mask: ["status"], payload: { status: a.status }, reason: a.reason }));
   return createOptimisationPlan(ctx, p, id, changes, { source: "create_status_change_plan" });
