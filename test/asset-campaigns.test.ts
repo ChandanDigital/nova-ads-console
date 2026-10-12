@@ -34,7 +34,7 @@ describe("every supported campaign type conforms to Google's v25 schema", () => 
       expect(plan.required_permissions).toEqual(["create_campaign"]);
     });
   }
-  it("launch needs the separate launch permission", () => expect(build("DISPLAY", { launch: true }).required_permissions).toContain("launch"));
+  it("launch is flagged as a launch change", () => expect(build("DISPLAY", { launch: true }).required_permissions).toContain("launch"));
   it("uses the right channel types", () => {
     const channel = (t: string) => build(t).operations.find((o) => o.id === "campaign")!.payload.advertisingChannelType;
     expect([channel("DISPLAY"), channel("DEMAND_GEN"), channel("PERFORMANCE_MAX"), channel("SHOPPING"), channel("APP")]).toEqual(["DISPLAY", "DEMAND_GEN", "PERFORMANCE_MAX", "SHOPPING", "MULTI_CHANNEL"]);
@@ -75,7 +75,7 @@ describe("missing or invalid inputs are refused before anything reaches Google",
   });
 });
 
-describe("through the MCP tool, approval and execution", () => {
+describe("through the MCP tool, validation and execution", () => {
   const fake = new FakeGoogle();
   let s: Session;
   let draft: string;
@@ -92,13 +92,12 @@ describe("through the MCP tool, approval and execution", () => {
   const spec = (type: string) => JSON.parse(JSON.stringify(SPECS[type]!).replaceAll("1234567890", CUSTOMER));
 
   for (const type of ["DISPLAY", "PERFORMANCE_MAX", "SHOPPING", "DEMAND_GEN", "APP"]) {
-    it(`${type}: draft, validate, human approval, execute, paused`, async () => {
+    it(`${type}: draft, validate, execute, paused`, async () => {
       const r = await mcpTool(draft, "create_campaign_plan", { account_id: CUSTOMER, spec: spec(type) });
       expect(r.isError, JSON.stringify(r.body)).toBe(false);
-      const { plan_id, plan_hash, required_permissions } = r.body.data;
-      expect((await mcpTool(draft, "validate_change_plan", { plan_id })).body.status).toBe("awaiting_approval");
-      expect((await mcpTool(apply, "execute_authorised_plan", { plan_id })).body.status).toBe("awaiting_approval");
-      expect((await call(`/api/plans/${plan_id}/approve`, { method: "POST", session: s, body: { hash: plan_hash, permissions: required_permissions, seconds: 3600, confirmation: "APPROVE" } })).status).toBe(200);
+      const { plan_id } = r.body.data;
+      expect((await mcpTool(apply, "execute_authorised_plan", { plan_id })).body.errors[0].code).toBe("validate_first");
+      expect((await mcpTool(draft, "validate_change_plan", { plan_id })).body.status).toBe("ready");
       const ex = await mcpTool(apply, "execute_authorised_plan", { plan_id });
       // The fake answers every read-back with the stored resources, so creations are verified like in production.
       expect(ex.body.data.errors, JSON.stringify(ex.body)).toEqual([]);
