@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Nodi Ads Cloud: remote MCP server, OAuth and dashboard for Google Ads on the Cloudflare free plan",
+  "description": "Nova Ads Console (cloud edition): remote MCP server, OAuth and dashboard for Google Ads on the Cloudflare free plan",
   "license": "MIT",
   "scripts": {
     "typecheck": "tsc --noEmit && tsc --noEmit -p test-ui",
