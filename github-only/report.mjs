@@ -65,7 +65,7 @@ export const runReport = async (env, fetchImpl = fetch, now = new Date()) => {
   const lines = [
     `# Google Ads report ${start} to ${end}`,
     "",
-    `Read-only report from the GitHub-only mode of Nodi Ads. Generated ${now.toISOString()}.`,
+    `Read-only report from the GitHub-only mode of Nova Ads Console. Generated ${now.toISOString()}.`,
     "",
     `| Cost | Clicks | Impressions | Conversions | CTR | Cost / conversion |`,
     `|---:|---:|---:|---:|---:|---:|`,
