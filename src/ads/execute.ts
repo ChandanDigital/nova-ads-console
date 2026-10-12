@@ -1,6 +1,6 @@
 import type { Ctx, Principal } from "../lib/context";
 import { now } from "../lib/db";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { audit } from "../lib/audit";
 import { isGlobalStop } from "../lib/settings";
 import { adsFor, getAccountRow, resolveAccount, type AccountRow } from "./accounts";
@@ -22,10 +22,15 @@ interface PlanRow {
   validation_json: string | null;
 }
 
+/** A plan runs only after a Google validation of this exact content in the last 30 minutes. */
+const VALIDATION_SECONDS = 1800;
+const READY = ["ready", "awaiting_approval"]; // "awaiting_approval" is the name older databases used for the same state
+const isReady = (row: { status: string; validated_at: number | null }): boolean => READY.includes(row.status) && !!row.validated_at && now() - row.validated_at <= VALIDATION_SECONDS;
+
 export const loadPlan = async (ctx: Ctx, id: string): Promise<{ row: PlanRow; plan: Plan }> => {
-  if (!/^[0-9a-f-]{36}$/.test(id)) throw new NodiError("invalid_input", "Invalid plan ID.", 400);
+  if (!/^[0-9a-f-]{36}$/.test(id)) throw new NovaError("invalid_input", "Invalid plan ID.", 400);
   const row = await ctx.db.first<PlanRow>("SELECT * FROM plans WHERE id = ?", id);
-  if (!row) throw new NodiError("plan_not_found", "No such plan.", 404);
+  if (!row) throw new NovaError("plan_not_found", "No such plan.", 404);
   return { row, plan: JSON.parse(row.plan_json) as Plan };
 };
 
@@ -34,7 +39,7 @@ export const loadPlanFor = async (ctx: Ctx, p: Principal, id: string, scope: "re
   const { row, plan } = await loadPlan(ctx, id);
   const account = await resolveAccount(ctx, p, row.account_id, scope);
   // The stored text must still hash to the stored hash; otherwise someone edited the row.
-  if ((await planHash(plan)) !== row.hash) throw new NodiError("plan_tampered", "The stored plan no longer matches its hash. Create a new plan.", 409);
+  if ((await planHash(plan)) !== row.hash) throw new NovaError("plan_tampered", "The stored plan no longer matches its hash. Create a new plan.", 409);
   return { row, plan, account };
 };
 
@@ -46,12 +51,13 @@ const setStatus = (ctx: Ctx, id: string, status: string, extra: { validated_at?:
 
 export const previewPlan = async (ctx: Ctx, p: Principal, id: string) => {
   const { row, plan } = await loadPlanFor(ctx, p, id, "read");
-  const approval = await ctx.db.first<{ permissions: string; approved_at: number; expires_at: number; revoked_at: number | null }>("SELECT permissions, approved_at, expires_at, revoked_at FROM approvals WHERE plan_id = ?", id);
+  const ready = isReady(row);
   return {
     status: row.status, plan, plan_hash: row.hash, validated_at: row.validated_at, validation: row.validation_json ? JSON.parse(row.validation_json) : null,
-    approval: approval ? { permissions: JSON.parse(approval.permissions), approved_at: approval.approved_at, expires_at: approval.expires_at, revoked: !!approval.revoked_at, active: !approval.revoked_at && approval.expires_at > now() } : null,
-    approval_screen: `/#/plans/${id}`,
+    ready_to_run: ready, validation_valid_until: row.validated_at ? row.validated_at + VALIDATION_SECONDS : null,
+    plan_screen: `/#/plans/${id}`,
     warnings: ["Recovery cannot undo money already spent. Removal is disabled."],
+    next_action: ready ? "Run execute_authorised_plan (needs the apply permission) or run it from the dashboard." : ["draft", "validation_failed"].includes(row.status) ? "Run validate_change_plan first." : undefined,
   };
 };
 
@@ -59,14 +65,14 @@ export const previewPlan = async (ctx: Ctx, p: Principal, id: string) => {
 const IDENTITY = "SELECT customer.id, customer.currency_code, customer.time_zone, customer.manager, customer.status FROM customer LIMIT 1";
 
 export const freshCheck = async (ctx: Ctx, account: AccountRow, plan: Plan): Promise<void> => {
-  if (Date.parse(plan.expires_at) <= Date.now()) throw new NodiError("plan_expired", "This plan expired. Create a fresh one.", 409);
+  if (Date.parse(plan.expires_at) <= Date.now()) throw new NovaError("plan_expired", "This plan expired. Create a fresh one.", 409);
   const ads = adsFor(ctx, account);
   const r = await ads.search(account.customer_id, IDENTITY, 1);
   const c = r.rows[0]?.customer;
   if (!c || c.currencyCode !== plan.account.currency || c.timeZone !== plan.account.timezone || (c.manager === true) !== plan.account.manager) {
-    throw new NodiError("stale_account", "Account identity (currency, timezone or type) changed after the draft.", 409);
+    throw new NovaError("stale_account", "Account identity (currency, timezone or type) changed after the draft.", 409);
   }
-  if (c.status && c.status !== "ENABLED") throw new NodiError("account_not_enabled", `The Google Ads account status is ${c.status}.`, 409);
+  if (c.status && c.status !== "ENABLED") throw new NovaError("account_not_enabled", `The Google Ads account status is ${c.status}.`, 409);
   const updates = plan.operations.filter((o) => o.action === "update");
   if (updates.length) {
     const current = await fetchCurrent(ctx, account, updates);
@@ -74,7 +80,7 @@ export const freshCheck = async (ctx: Ctx, account: AccountRow, plan: Plan): Pro
       const res = current.get(op.resource_name!);
       const now_ = Object.fromEntries(op.field_mask.map((f) => [f, res ? (pathGet(res, f) ?? null) : undefined]));
       if (!res || JSON.stringify(normalize(now_)) !== JSON.stringify(normalize(op.before))) {
-        throw new NodiError("stale_plan", `A field of ${op.resource_name} changed after the draft. Rebuild and review the plan.`, 409);
+        throw new NovaError("stale_plan", `A field of ${op.resource_name} changed after the draft. Rebuild and review the plan.`, 409);
       }
     }
   }
@@ -82,7 +88,7 @@ export const freshCheck = async (ctx: Ctx, account: AccountRow, plan: Plan): Pro
     const camps = await ads.search(account.customer_id, `SELECT campaign.id, campaign.name, campaign.campaign_budget FROM campaign WHERE campaign.campaign_budget = ${gaqlString(op.resource_name!)} ORDER BY campaign.id LIMIT 200`, 200);
     const expected = (op.evidence.shared_budget_campaigns as { id: string }[] | undefined) ?? [];
     if (camps.truncated || JSON.stringify(camps.rows.map((x) => String(x.campaign?.id))) !== JSON.stringify(expected.map((x) => String(x.id)))) {
-      throw new NodiError("stale_plan", "Campaigns sharing this budget changed. Review the full scope again.", 409);
+      throw new NovaError("stale_plan", "Campaigns sharing this budget changed. Review the full scope again.", 409);
     }
   }
 };
@@ -90,8 +96,8 @@ export const freshCheck = async (ctx: Ctx, account: AccountRow, plan: Plan): Pro
 // ----------------------------------------------------------------------- validate
 export const validatePlan = async (ctx: Ctx, p: Principal, id: string) => {
   const { row, plan, account } = await loadPlanFor(ctx, p, id, "draft");
-  if (["running", "succeeded", "partially_succeeded", "outcome_unknown", "failed", "rejected"].includes(row.status)) {
-    throw new NodiError("already_final", `This plan is ${row.status}; validate a new plan instead.`, 409);
+  if (["running", "succeeded", "partially_succeeded", "outcome_unknown", "failed", "cancelled", "rejected"].includes(row.status)) {
+    throw new NovaError("already_final", `This plan is ${row.status}; validate a new plan instead.`, 409);
   }
   try {
     await freshCheck(ctx, account, plan);
@@ -101,11 +107,11 @@ export const validatePlan = async (ctx: Ctx, p: Principal, id: string) => {
       const res = await adsFor(ctx, account).mutate(account.customer_id, compile(plan), { validateOnly: true });
       validation = { validated_operations: plan.operations.length, google_responses: (res.mutateOperationResponses ?? []).length, validate_only: true };
     }
-    await setStatus(ctx, id, "awaiting_approval", { validated_at: now(), validation_json: JSON.stringify(validation) });
+    await setStatus(ctx, id, "ready", { validated_at: now(), validation_json: JSON.stringify(validation) });
     await audit(ctx.db, { actor_type: p.kind === "admin" ? "admin" : "mcp", actor_id: p.id, action: "plan_validated", target: id, outcome: "ok" });
-    return { status: "awaiting_approval", plan_hash: row.hash, validation, next_action: "A human must approve this exact plan in the dashboard." };
+    return { status: "ready", plan_hash: row.hash, validation, next_action: "Validated. Run execute_authorised_plan within 30 minutes (needs the apply permission), or run it from the dashboard." };
   } catch (e) {
-    if (e instanceof NodiError) {
+    if (e instanceof NovaError) {
       await setStatus(ctx, id, "validation_failed", { validation_json: JSON.stringify({ code: e.code, message: e.message, details: e.details, request_id: e.requestId }) });
       await audit(ctx.db, { actor_type: p.kind === "admin" ? "admin" : "mcp", actor_id: p.id, action: "plan_validated", target: id, outcome: "error", detail: { code: e.code } });
     }
@@ -113,40 +119,13 @@ export const validatePlan = async (ctx: Ctx, p: Principal, id: string) => {
   }
 };
 
-// ----------------------------------------------------------------------- approval (human only)
-export const approvePlan = async (ctx: Ctx, adminId: string, id: string, input: { hash?: unknown; permissions?: unknown; seconds?: unknown; confirmation?: unknown }) => {
-  if (input.confirmation !== "APPROVE") throw new NodiError("needs_confirmation", "Type APPROVE after reviewing the plan.", 400);
-  const { row, plan } = await loadPlan(ctx, id);
-  if ((await planHash(plan)) !== row.hash) throw new NodiError("plan_tampered", "The stored plan no longer matches its hash.", 409);
-  if (input.hash !== row.hash) throw new NodiError("changed_plan", "The plan changed since you opened it. Review the current content.", 409);
-  if (row.status !== "awaiting_approval" || !row.validated_at || now() - row.validated_at > 1800) throw new NodiError("validate_first", "Run a fresh Google validation (within the last 30 minutes) before approving.", 409);
-  if (row.expires_at <= now()) throw new NodiError("plan_expired", "This plan expired.", 409);
-  const perms = Array.isArray(input.permissions) ? (input.permissions as string[]) : [];
-  if (!plan.required_permissions.every((x) => perms.includes(x))) throw new NodiError("incomplete_approval", `Approval must name every permission class: ${plan.required_permissions.join(", ")}.`, 400);
-  const seconds = Number(input.seconds ?? 3600);
-  if (!Number.isInteger(seconds) || seconds < 60 || seconds > 86400) throw new NodiError("invalid_expiry", "Approval must expire in 1 minute to 24 hours.", 400);
-  const t = now();
-  await ctx.db.run(
-    "INSERT INTO approvals (plan_id, plan_hash, admin_id, permissions, approved_at, expires_at, revoked_at) VALUES (?,?,?,?,?,?,NULL) ON CONFLICT(plan_id) DO UPDATE SET plan_hash = excluded.plan_hash, admin_id = excluded.admin_id, permissions = excluded.permissions, approved_at = excluded.approved_at, expires_at = excluded.expires_at, revoked_at = NULL",
-    id, row.hash, adminId, JSON.stringify(perms), t, t + seconds,
-  );
-  await audit(ctx.db, { actor_type: "admin", actor_id: adminId, action: "plan_approved", target: id, outcome: "ok", detail: { permissions: perms, expires_in: seconds }, ip_hash: ctx.ipHash });
-  return { plan_id: id, plan_hash: row.hash, approved_at: t, expires_at: t + seconds, permissions: perms };
-};
-
-export const rejectPlan = async (ctx: Ctx, adminId: string, id: string) => {
+// ----------------------------------------------------------------------- cancel (administrator)
+export const cancelPlan = async (ctx: Ctx, adminId: string, id: string) => {
   const { row } = await loadPlan(ctx, id);
-  if (["running", "succeeded", "partially_succeeded", "outcome_unknown", "failed"].includes(row.status)) throw new NodiError("already_final", `This plan is ${row.status}.`, 409);
-  await ctx.db.run("UPDATE approvals SET revoked_at = ? WHERE plan_id = ? AND revoked_at IS NULL", now(), id);
-  await setStatus(ctx, id, "rejected");
-  await audit(ctx.db, { actor_type: "admin", actor_id: adminId, action: "plan_rejected", target: id, outcome: "ok", ip_hash: ctx.ipHash });
-  return { status: "rejected" };
-};
-
-export const revokeApproval = async (ctx: Ctx, adminId: string, id: string) => {
-  const n = await ctx.db.run("UPDATE approvals SET revoked_at = ? WHERE plan_id = ? AND revoked_at IS NULL", now(), id);
-  await audit(ctx.db, { actor_type: "admin", actor_id: adminId, action: "approval_revoked", target: id, outcome: n ? "ok" : "error", ip_hash: ctx.ipHash });
-  return { revoked: n > 0 };
+  if (["running", "succeeded", "partially_succeeded", "outcome_unknown", "failed"].includes(row.status)) throw new NovaError("already_final", `This plan is ${row.status}.`, 409);
+  await setStatus(ctx, id, "cancelled");
+  await audit(ctx.db, { actor_type: "admin", actor_id: adminId, action: "plan_cancelled", target: id, outcome: "ok", ip_hash: ctx.ipHash });
+  return { status: "cancelled" };
 };
 
 // ----------------------------------------------------------------------- execute
@@ -197,28 +176,22 @@ const overall = (results: OpResult[]): string => {
 export const executePlan = async (ctx: Ctx, p: Principal, id: string) => {
   const { row, plan, account } = await loadPlanFor(ctx, p, id, "apply");
   if (["running", "succeeded", "partially_succeeded", "failed", "outcome_unknown"].includes(row.status)) return getOperationStatus(ctx, p, id);
-  if (await isGlobalStop(ctx.db)) throw new NodiError("stopped", "The administrator's global stop blocks all account writes.", 423);
-  if (row.status !== "awaiting_approval") throw new NodiError("validate_first", "Google validation must pass for this exact plan, and a human must approve it.", 409);
-  const approval = await ctx.db.first<{ plan_hash: string; admin_id: string; permissions: string; expires_at: number; revoked_at: number | null }>("SELECT * FROM approvals WHERE plan_id = ?", id);
-  if (!approval || approval.revoked_at) throw new NodiError("awaiting_approval", "A human must approve this exact plan in the dashboard. No tool can approve it.", 409);
-  if (approval.plan_hash !== row.hash || approval.plan_hash !== (await planHash(plan))) throw new NodiError("awaiting_approval", "The approval does not match the current plan content.", 409);
-  if (approval.expires_at <= now()) throw new NodiError("approval_expired", "The approval expired. Ask the human to approve again.", 409);
-  const perms = JSON.parse(approval.permissions) as string[];
-  if (!plan.required_permissions.every((x) => perms.includes(x))) throw new NodiError("awaiting_approval", "The approval does not cover every permission class of this plan.", 409);
-  if (row.expires_at <= now()) throw new NodiError("plan_expired", "This plan expired.", 409);
+  if (await isGlobalStop(ctx.db)) throw new NovaError("stopped", "The administrator's global stop blocks all account writes.", 423);
+  if (!isReady(row)) throw new NovaError("validate_first", "Run validate_change_plan for this exact plan first. A Google validation is good for 30 minutes.", 409);
+  if (row.expires_at <= now()) throw new NovaError("plan_expired", "This plan expired.", 409);
 
   const ads = adsFor(ctx, account);
   // Read-only pre-flight: nothing has been sent to Google that can change the account yet.
   await freshCheck(ctx, account, plan);
   if (isRecommendationPlan(plan)) await validateRecommendations(ctx, account, plan);
   else await ads.mutate(account.customer_id, compile(plan), { validateOnly: true });
-  if (await isGlobalStop(ctx.db)) throw new NodiError("stopped", "Global stop changed before dispatch.", 423);
+  if (await isGlobalStop(ctx.db)) throw new NovaError("stopped", "Global stop changed before dispatch.", 423);
 
-  // Compare-and-set: exactly one caller can move awaiting_approval -> running, so a plan can never be dispatched twice.
-  const claimed = await ctx.db.run("UPDATE plans SET status = 'running', updated_at = ? WHERE id = ? AND status = 'awaiting_approval'", now(), id);
+  // Compare-and-set: exactly one caller can move ready -> running, so a plan can never be dispatched twice.
+  const claimed = await ctx.db.run("UPDATE plans SET status = 'running', updated_at = ? WHERE id = ? AND status IN ('ready', 'awaiting_approval')", now(), id);
   if (claimed !== 1) return getOperationStatus(ctx, p, id);
   await ctx.db.run("INSERT INTO executions (plan_id, status, started_at, executed_by) VALUES (?, 'running', ?, ?) ON CONFLICT(plan_id) DO NOTHING", id, now(), `${p.kind}:${p.label}`);
-  await audit(ctx.db, { actor_type: p.kind === "admin" ? "admin" : "mcp", actor_id: p.id, action: "plan_execute_started", target: id, outcome: "ok", detail: { approved_by: approval.admin_id } });
+  await audit(ctx.db, { actor_type: p.kind === "admin" ? "admin" : "mcp", actor_id: p.id, action: "plan_execute_started", target: id, outcome: "ok" });
 
   let status = "failed";
   let results: OpResult[] = [];
@@ -238,7 +211,7 @@ export const executePlan = async (ctx: Ctx, p: Principal, id: string) => {
       status = overall(results);
     }
   } catch (e) {
-    if (e instanceof NodiError) {
+    if (e instanceof NovaError) {
       status = e.code === "outcome_unknown" ? "outcome_unknown" : "failed";
       errors = [{ code: e.code, message: e.message, details: e.details }];
       requestId = e.requestId;
@@ -268,7 +241,7 @@ export const getOperationStatus = async (ctx: Ctx, p: Principal, id: string) => 
 export const reconcilePlan = async (ctx: Ctx, p: Principal, id: string) => {
   const { row, plan, account } = await loadPlanFor(ctx, p, id, "draft");
   const ex = await ctx.db.first<{ status: string; results_json: string | null }>("SELECT status, results_json FROM executions WHERE plan_id = ?", id);
-  if (!ex) throw new NodiError("nothing_to_reconcile", "This plan was never executed.", 409);
+  if (!ex) throw new NovaError("nothing_to_reconcile", "This plan was never executed.", 409);
   if (isRecommendationPlan(plan)) {
     const results = await verifyRecommendations(ctx, account, plan);
     const status = overall(results);
@@ -310,15 +283,15 @@ export const getChangeHistory = async (ctx: Ctx, p: Principal, accountId: string
 export const createRecoveryPlan = async (ctx: Ctx, p: Principal, id: string) => {
   const { plan, account } = await loadPlanFor(ctx, p, id, "draft");
   const ex = await ctx.db.first<{ status: string; results_json: string | null }>("SELECT status, results_json FROM executions WHERE plan_id = ?", id);
-  if (!ex || !["succeeded", "partially_succeeded"].includes(ex.status)) throw new NodiError("inspect_first", "Resolve uncertain or failed outcomes before drafting recovery.", 409);
-  if (isRecommendationPlan(plan)) throw new NodiError("recovery_unavailable", "Nodi cannot undo an applied or dismissed recommendation. Review Google Ads change history and draft a new reviewed plan.", 409);
+  if (!ex || !["succeeded", "partially_succeeded"].includes(ex.status)) throw new NovaError("inspect_first", "Resolve uncertain or failed outcomes before drafting recovery.", 409);
+  if (isRecommendationPlan(plan)) throw new NovaError("recovery_unavailable", "Nova Ads cannot undo an applied or dismissed recommendation. Review Google Ads change history and draft a new reviewed plan.", 409);
   const results = JSON.parse(ex.results_json ?? "[]") as OpResult[];
   const ops: PlanOperation[] = [];
   plan.operations.forEach((op, i) => {
     const r = results[i];
     if (!r || r.status !== "succeeded") return;
     if (op.action === "update") {
-      if (Object.values(op.before).some((v) => v === null || v === undefined)) throw new NodiError("recovery_unavailable", "A previous value was unavailable; recovery needs manual review.", 409);
+      if (Object.values(op.before).some((v) => v === null || v === undefined)) throw new NovaError("recovery_unavailable", "A previous value was unavailable; recovery needs manual review.", 409);
       const payload: Record<string, any> = {};
       for (const [k, v] of Object.entries(op.before)) setPath(payload, k, v);
       ops.push(PlanOperationSchema.parse({ id: `recover${op.id}`, kind: op.kind, action: "update", resource_name: op.resource_name, field_mask: op.field_mask, payload, reason: "Restore the previous reviewed field values.", spending_effect: "Previously spent money remains spent.", recovery: "Review a new plan to change settings again." }));
@@ -326,7 +299,7 @@ export const createRecoveryPlan = async (ctx: Ctx, p: Principal, id: string) => 
       ops.push(PlanOperationSchema.parse({ id: `recover${op.id}`, kind: op.kind, action: "update", resource_name: r.resource_name, field_mask: ["status"], payload: { status: "PAUSED" }, reason: "Pause the successfully created serving resource.", spending_effect: "Pauses future serving; existing charges remain.", recovery: "A separate launch approval can re-enable it." }));
     }
   });
-  if (!ops.length) throw new NodiError("recovery_unavailable", "No supported reversible setting exists in this operation.", 409);
+  if (!ops.length) throw new NovaError("recovery_unavailable", "No supported reversible setting exists in this operation.", 409);
   await attachBefore(ctx, account, ops);
   const recovery = newPlan(`${p.kind}:${p.label}`, planAccount(account), ops, { recovery_of: id });
   validatePlanShape(recovery);
