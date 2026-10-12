@@ -1,7 +1,7 @@
 // UI text (English only). Kept in one place so wording is easy to change.
 export const TEXT = {
   en: {
-    appName: "Nodi Ads Console",
+    appName: "Nova Ads Console",
     nav_overview: "Overview", nav_connections: "Google connection", nav_accounts: "Accounts", nav_performance: "Performance",
     nav_approvals: "Approvals", nav_activity: "Activity", nav_ai: "AI access (MCP)", nav_security: "Credential security",
     nav_diagnostics: "Diagnostics", nav_hosting: "Hosting & quotas",
