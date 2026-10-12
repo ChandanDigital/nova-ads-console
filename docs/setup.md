@@ -7,7 +7,7 @@ No part of this requires installing Python, Node.js, Docker or a terminal.
 ## 1. Put the code in a private GitHub repository
 
 1. GitHub → **New repository**. Name it `nodi-ads-cloud`, choose **Private**, do not add a README. Create it.
-2. Unzip `nodi-ads-cloud-0.3.0.zip` on your computer. Open the new repository → **uploading an existing file**.
+2. Unzip `nova-ads-console-cloud-0.3.0.zip` on your computer. Open the new repository → **uploading an existing file**.
 3. Drag the **contents** of the unzipped folder (not the folder itself) into the page. GitHub accepts about 100 files per upload, so do it in two or three batches: first `src`, `public`, `migrations`, `scripts`, `github-only` and the loose files; then `test` and `docs`; then `.github` (a hidden folder: turn on "show hidden files", or drag it separately). Commit each batch to `main`.
 4. Open `.github/CODEOWNERS` and replace `@REPLACE-WITH-YOUR-GITHUB-USERNAME` with your username.
 5. Recommended: *Settings → Branches → Add rule* for `main`: require a pull request and the **CI** check. That makes only reviewed commits deploy.
