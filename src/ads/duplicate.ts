@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Ctx, Principal } from "../lib/context";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { moneyMicros } from "../google/gaql";
 import { adsFor, resolveAccount } from "./accounts";
 import { SearchSpecSchema, newPlan, searchCampaignOperations, type SearchSpec } from "./plans";
@@ -8,7 +8,7 @@ import { planAccount, savePlan } from "./planner";
 
 /**
  * Duplicate a Search campaign as a NEW paused campaign. Nothing is changed in the source campaign.
- * The copy goes through the same plan -> Google validateOnly -> human approval -> execute path as any new campaign.
+ * The copy goes through the same plan -> Google validateOnly -> execute path as any new campaign.
  */
 export const DuplicateInputSchema = z
   .object({
@@ -32,21 +32,21 @@ const NOT_COPIED = "Not copied: sitelinks and callouts, ad schedules, device bid
 export const createDuplicateCampaignPlan = async (ctx: Ctx, p: Principal, accountId: string, input: unknown) => {
   const account = await resolveAccount(ctx, p, accountId, "draft");
   const parsed = DuplicateInputSchema.safeParse(input);
-  if (!parsed.success) throw new NodiError("invalid_input", "Check the duplication fields.", 400, parsed.error.issues.slice(0, 10).map((i) => ({ field: i.path.join("."), problem: i.message })));
+  if (!parsed.success) throw new NovaError("invalid_input", "Check the duplication fields.", 400, parsed.error.issues.slice(0, 10).map((i) => ({ field: i.path.join("."), problem: i.message })));
   const { campaign_id: cid } = parsed.data;
   const ads = adsFor(ctx, account);
   const read = async (query: string) => {
     const r = await ads.search(account.customer_id, query, MAX_ROWS);
-    if (r.truncated) throw new NodiError("campaign_too_large", `This campaign has more than ${MAX_ROWS} rows in one of its parts, which is more than a duplicate plan can safely carry. Duplicate it in parts or build it with create_campaign_plan.`, 422);
+    if (r.truncated) throw new NovaError("campaign_too_large", `This campaign has more than ${MAX_ROWS} rows in one of its parts, which is more than a duplicate plan can safely carry. Duplicate it in parts or build it with create_campaign_plan.`, 422);
     return r.rows;
   };
 
   const [camp] = await read(
     `SELECT campaign.id, campaign.name, campaign.advertising_channel_type, campaign.bidding_strategy_type, campaign.network_settings.target_search_network, campaign.geo_target_type_setting.positive_geo_target_type, campaign.contains_eu_political_advertising, campaign.maximize_conversions.target_cpa_micros, campaign.target_cpa.target_cpa_micros, campaign.maximize_conversion_value.target_roas, campaign.target_roas.target_roas, campaign.target_spend.cpc_bid_ceiling_micros, campaign_budget.amount_micros FROM campaign WHERE campaign.id = ${cid} LIMIT 1`,
   );
-  if (!camp?.campaign) throw new NodiError("campaign_not_found", "No such campaign in this account.", 404);
+  if (!camp?.campaign) throw new NovaError("campaign_not_found", "No such campaign in this account.", 404);
   const c = camp.campaign;
-  if (c.advertisingChannelType !== "SEARCH") throw new NodiError("unsupported_campaign_type", `Only Search campaigns can be duplicated here (this one is ${c.advertisingChannelType}). Build other types with create_campaign_plan.`, 422);
+  if (c.advertisingChannelType !== "SEARCH") throw new NovaError("unsupported_campaign_type", `Only Search campaigns can be duplicated here (this one is ${c.advertisingChannelType}). Build other types with create_campaign_plan.`, 422);
 
   let bidding: SearchSpec["bidding"];
   const extra: Partial<SearchSpec> = {};
@@ -72,11 +72,11 @@ export const createDuplicateCampaignPlan = async (ctx: Ctx, p: Principal, accoun
       break;
     }
     default:
-      throw new NodiError("unsupported_bidding", `The bidding strategy ${c.biddingStrategyType} cannot be copied by the Search builder. Create the campaign with create_campaign_plan.`, 422);
+      throw new NovaError("unsupported_bidding", `The bidding strategy ${c.biddingStrategyType} cannot be copied by the Search builder. Create the campaign with create_campaign_plan.`, 422);
   }
 
   const eu = parsed.data.contains_eu_political_advertising ?? (c.containsEuPoliticalAdvertising === "CONTAINS_EU_POLITICAL_ADVERTISING" ? true : c.containsEuPoliticalAdvertising === "DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING" ? false : undefined);
-  if (eu === undefined) throw new NodiError("declaration_needed", "Google did not return the EU political advertising declaration. Send contains_eu_political_advertising (true or false).", 422);
+  if (eu === undefined) throw new NovaError("declaration_needed", "Google did not return the EU political advertising declaration. Send contains_eu_political_advertising (true or false).", 422);
 
   const [criteria, groups, keywords, adRows] = [
     await read(`SELECT campaign_criterion.type, campaign_criterion.negative, campaign_criterion.location.geo_target_constant, campaign_criterion.keyword.text, campaign_criterion.keyword.match_type FROM campaign_criterion WHERE campaign.id = ${cid} AND campaign_criterion.type IN ('LOCATION', 'KEYWORD')`),
@@ -117,10 +117,10 @@ export const createDuplicateCampaignPlan = async (ctx: Ctx, p: Principal, accoun
   }
   if (skipped) warnings.push(`${skipped} ad group(s) were skipped because they lack an eligible keyword, responsive search ad or final URL.`);
   if (groupNegatives) warnings.push(`${groupNegatives} ad-group-level negative keyword(s) were not copied.`);
-  if (!specGroups.length) throw new NodiError("nothing_to_copy", "No ad group with keywords and a responsive search ad was found in this campaign.", 422);
+  if (!specGroups.length) throw new NovaError("nothing_to_copy", "No ad group with keywords and a responsive search ad was found in this campaign.", 422);
 
   const budget = parsed.data.daily_budget ?? microsToDecimal(camp.campaignBudget?.amountMicros ?? "0");
-  if (moneyMicros(budget) <= 0n) throw new NodiError("invalid_budget", "The source budget could not be read. Send daily_budget.", 422);
+  if (moneyMicros(budget) <= 0n) throw new NovaError("invalid_budget", "The source budget could not be read. Send daily_budget.", 422);
   const candidate = {
     name: parsed.data.new_name, daily_budget: budget, bidding, ...extra,
     locations, excluded_locations: excluded, negative_keywords: negatives, groups: specGroups,
@@ -131,7 +131,7 @@ export const createDuplicateCampaignPlan = async (ctx: Ctx, p: Principal, accoun
   };
   const spec = SearchSpecSchema.safeParse(candidate);
   if (!spec.success) {
-    throw new NodiError("duplicate_invalid", "The source campaign could not be turned into a valid new campaign. Fix the listed fields (for example by using create_campaign_plan).", 422, spec.error.issues.slice(0, 20).map((i) => ({ field: i.path.join("."), problem: i.message })));
+    throw new NovaError("duplicate_invalid", "The source campaign could not be turned into a valid new campaign. Fix the listed fields (for example by using create_campaign_plan).", 422, spec.error.issues.slice(0, 20).map((i) => ({ field: i.path.join("."), problem: i.message })));
   }
   const planId = crypto.randomUUID();
   const ops = searchCampaignOperations(spec.data, planAccount(account), planId.slice(0, 8));
