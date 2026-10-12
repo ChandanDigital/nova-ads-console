@@ -4,8 +4,8 @@
 
 | Actor | Credential | Can | Cannot |
 |---|---|---|---|
-| **Administrator** (human) | `nodi_admin_…` credential → browser session (HttpOnly cookie + CSRF token) | connect Google, allow accounts, approve/reject plans, issue/revoke AI tokens, global stop, budget cap, diagnostics | — |
-| **AI app** | OAuth 2.1 access token (`nodi_at_…`) or pasted API token (`nodi_api_…`), scopes `read` `draft` `apply` | read reports; draft and validate plans; execute a plan a human approved | approve a plan, see non-allowed accounts, manage tokens/credentials/settings, recover the admin credential, sign in to the dashboard |
+| **Administrator** (human) | `nova_admin_…` credential → browser session (HttpOnly cookie + CSRF token) | connect Google, allow accounts, approve/reject plans, issue/revoke AI tokens, global stop, budget cap, diagnostics | — |
+| **AI app** | OAuth 2.1 access token (`nova_at_…`) or pasted API token (`nova_api_…`), scopes `read` `draft` `apply` | read reports; draft and validate plans; execute a plan a human approved | approve a plan, see non-allowed accounts, manage tokens/credentials/settings, recover the admin credential, sign in to the dashboard |
 | **Cloudflare account owner** | Cloudflare login | set Worker secrets (incl. `ADMIN_SETUP_SECRET`), read D1 | — (this is the root of trust, as it is for any hosted app) |
 
 Enforced by tests in `test/security.test.ts`, `test/admin.test.ts`, `test/execute.test.ts`, `test/mcp.test.ts`: every registered `/api` route answers 401 without a session; a bearer token is refused on every dashboard route (403); no MCP tool name relates to approval, credentials, tokens, settings or recovery; tool arguments such as `approved: true` are ignored.
