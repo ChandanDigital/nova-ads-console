@@ -52,8 +52,8 @@ export const publicOrigin = (env: Env, request: Request): string => {
 };
 
 export const isSecure = (origin: string): boolean => origin.startsWith("https://");
-export const SESSION_COOKIE_SECURE = "__Host-nodi_session";
-export const SESSION_COOKIE_PLAIN = "nodi_session";
+export const SESSION_COOKIE_SECURE = "__Host-nova_session";
+export const SESSION_COOKIE_PLAIN = "nova_session";
 export const sessionCookieName = (origin: string): string => (isSecure(origin) ? SESSION_COOKIE_SECURE : SESSION_COOKIE_PLAIN);
 
 export const sessionSetCookie = (origin: string, value: string, maxAge: number): string =>
