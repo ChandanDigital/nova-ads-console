@@ -284,7 +284,7 @@ export const reconcilePlan = async (ctx: Ctx, p: Principal, id: string) => {
     const tag = plan.id.slice(0, 8);
     const ads = adsFor(ctx, account);
     for (const kind of ["campaign", "campaign_budget"]) {
-      const r = await ads.search(account.customer_id, `SELECT ${kind}.resource_name, ${kind}.name FROM ${kind} WHERE ${kind}.name LIKE ${gaqlString(`%[Nodi ${tag}]%`)} LIMIT 5`, 5);
+      const r = await ads.search(account.customer_id, `SELECT ${kind}.resource_name, ${kind}.name FROM ${kind} WHERE ${kind}.name LIKE ${gaqlString(`%[Nova ${tag}]%`)} LIMIT 5`, 5);
       const idx = plan.operations.findIndex((o) => o.kind === kind && o.action === "create");
       if (idx >= 0 && r.rows.length === 1) resources[idx] = r.rows[0]![snakeToCamel(kind)]?.resourceName ?? null;
     }
