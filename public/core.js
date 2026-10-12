@@ -6,12 +6,12 @@ export const state = { csrf: null, signedIn: false, needsSetup: false, origin: l
 const safeGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const safeSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage may be blocked */ } };
 state.lang = "en";
-export const setLang = (l) => { state.lang = l; safeSet("nodi.lang", l); document.documentElement.lang = l; };
+export const setLang = (l) => { state.lang = l; safeSet("nova.lang", l); document.documentElement.lang = l; };
 export const t = (k) => TEXT[state.lang]?.[k] ?? TEXT.en[k] ?? k;
 document.documentElement.lang = state.lang;
 
-export const setTheme = (th) => { safeSet("nodi.theme", th); if (th === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", th); };
-setTheme(safeGet("nodi.theme") || "auto");
+export const setTheme = (th) => { safeSet("nova.theme", th); if (th === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", th); };
+setTheme(safeGet("nova.theme") || "auto");
 
 // ------------------------------------------------------------------ DOM builder (text only: nothing is ever parsed as HTML)
 export const h = (tag, attrs, ...kids) => {
