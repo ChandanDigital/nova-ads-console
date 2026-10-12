@@ -1,13 +1,13 @@
 import { z } from "zod";
 import type { Ctx, Principal } from "../lib/context";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { gaqlString } from "../google/gaql";
 import { adsFor, resolveAccount, type AccountRow } from "./accounts";
 import { PlanOperationSchema, newPlan, resourceValid, type Plan } from "./plans";
 import { planAccount, savePlan } from "./planner";
 
 /**
- * Apply or dismiss Google's own recommendations through the normal plan -> validate -> human approval -> execute path.
+ * Apply or dismiss Google's own recommendations through the normal plan -> validate -> execute path.
  * Google's RecommendationService has no validate-only mode, so "validate" here re-reads each recommendation (still open, same type)
  * instead of asking Google to rehearse the change. Budget recommendations are refused: use create_budget_change_plan, which shows the
  * exact amounts and enforces the administrator's budget cap.
@@ -45,17 +45,17 @@ const readRecommendations = async (ctx: Ctx, account: AccountRow, names: string[
 export const createRecommendationPlan = async (ctx: Ctx, p: Principal, accountId: string, input: unknown) => {
   const account = await resolveAccount(ctx, p, accountId, "draft");
   const parsed = RecommendationInputSchema.safeParse(input);
-  if (!parsed.success) throw new NodiError("invalid_input", "Check the recommendation fields.", 400, parsed.error.issues.slice(0, 10).map((i) => ({ field: i.path.join("."), problem: i.message })));
+  if (!parsed.success) throw new NovaError("invalid_input", "Check the recommendation fields.", 400, parsed.error.issues.slice(0, 10).map((i) => ({ field: i.path.join("."), problem: i.message })));
   const { action, reason } = parsed.data;
   const names = [...new Set(parsed.data.recommendations.map((r) => (r.startsWith("customers/") ? r : `customers/${account.customer_id}/recommendations/${r}`)))];
   for (const n of names) resourceValid(n, account.customer_id, "recommendation");
   const found = await readRecommendations(ctx, account, names);
   const ops = names.map((name, i) => {
     const info = found.get(name);
-    if (!info) throw new NodiError("recommendation_not_found", `Recommendation ${name} was not found in this account (it may already have been applied or may have expired).`, 404);
-    if (info.dismissed) throw new NodiError("recommendation_dismissed", `Recommendation ${name} is already dismissed.`, 409);
+    if (!info) throw new NovaError("recommendation_not_found", `Recommendation ${name} was not found in this account (it may already have been applied or may have expired).`, 404);
+    if (info.dismissed) throw new NovaError("recommendation_dismissed", `Recommendation ${name} is already dismissed.`, 409);
     if (action === "apply" && BUDGET_TYPES.has(info.type)) {
-      throw new NodiError("use_budget_plan", `${info.type} changes the daily budget. Use create_budget_change_plan so the exact amount and your budget cap are shown.`, 422);
+      throw new NovaError("use_budget_plan", `${info.type} changes the daily budget. Use create_budget_change_plan so the exact amount and your budget cap are shown.`, 422);
     }
     const effect = action === "apply"
       ? `Google applies this ${info.type} recommendation as Google generated it. Depending on the type it can change ads, keywords, bids or settings and may change spend. Google offers no validate-only check for this action.`
@@ -63,7 +63,7 @@ export const createRecommendationPlan = async (ctx: Ctx, p: Principal, accountId
     return PlanOperationSchema.parse({
       id: `rec${i}`, kind: "recommendation", action, resource_name: name, payload: {},
       reason, spending_effect: effect,
-      recovery: action === "apply" ? "Nodi cannot undo an applied recommendation. Review Google Ads change history and draft a new reviewed plan to adjust." : "Not needed. Dismissed recommendations can reappear.",
+      recovery: action === "apply" ? "Nova Ads cannot undo an applied recommendation. Review Google Ads change history and draft a new reviewed plan to adjust." : "Not needed. Dismissed recommendations can reappear.",
       evidence: { type: info.type, campaign: info.campaign, ad_group: info.ad_group },
     });
   });
@@ -77,8 +77,8 @@ export const validateRecommendations = async (ctx: Ctx, account: AccountRow, pla
   const found = await readRecommendations(ctx, account, names);
   for (const op of plan.operations) {
     const info = found.get(op.resource_name!);
-    if (!info || info.dismissed) throw new NodiError("stale_plan", `Recommendation ${op.resource_name} is no longer open. Draft a new plan.`, 409);
-    if (info.type !== op.evidence.type) throw new NodiError("stale_plan", `Recommendation ${op.resource_name} changed type after the draft.`, 409);
+    if (!info || info.dismissed) throw new NovaError("stale_plan", `Recommendation ${op.resource_name} is no longer open. Draft a new plan.`, 409);
+    if (info.type !== op.evidence.type) throw new NovaError("stale_plan", `Recommendation ${op.resource_name} changed type after the draft.`, 409);
   }
   return { validated_operations: plan.operations.length, google_validate_only: false, checked: "Each recommendation is still open and unchanged. Google offers no validate-only mode for apply or dismiss." };
 };
