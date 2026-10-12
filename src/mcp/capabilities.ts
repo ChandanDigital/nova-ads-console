@@ -25,7 +25,6 @@ export const capabilityList = (): Capability[] => {
     c("campaign_updates", "implemented", "mutate with exact update masks: status, budget, bids, names, tracking templates"),
     c("keyword_and_ad_group_updates", "implemented", "mutate: ad group status/bid, keyword status/bid/final URLs, new keywords and negatives (with evidence)"),
     c("validation", "implemented", "mutate validateOnly=true before approval and again before execution"),
-    c("human_approval", "implemented", "separate authenticated dashboard screen; no MCP tool or token scope can approve"),
     c("recovery_plans", "implemented", "new reviewed plan restoring previous values or pausing created resources"),
     c("remote_https_mcp", "implemented", "Streamable HTTP at /mcp on Cloudflare Workers; OAuth 2.1 + PKCE or pasted API token"),
     c("display_shopping_pmax_demandgen_app_creation", "implemented", "mutate: responsive Display, Standard Shopping, Performance Max (non-retail), Demand Gen (multi-asset), App installs; paused by default", "Needs an eligible account, existing image/video assets (no file upload), a linked Merchant feed or app listing. General Video campaign creation is not supported by the API."),
@@ -43,7 +42,7 @@ export const capabilityList = (): Capability[] => {
 };
 
 export const capabilitySummary = (env: Env) => ({
-  product: "nodi-ads-cloud",
+  product: "nova-ads-cloud",
   version: "0.3.0",
   release_state: "release candidate; no live Google account verification",
   api: { transport: "Google Ads REST API", version: adsVersion(env), developer_token: "not required (retired 9 Sep 2026); access follows the OAuth client's Google Cloud project" },
