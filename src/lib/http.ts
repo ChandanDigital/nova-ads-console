@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { NodiError, toErrorBody } from "./errors";
+import { NovaError, toErrorBody } from "./errors";
 import { sha256Hex } from "./crypto";
 
 export const SECURITY_HEADERS: Record<string, string> = {
@@ -20,7 +20,7 @@ export const json = (data: unknown, status = 200, headers: Record<string, string
   });
 
 export const errorResponse = (e: unknown): Response => {
-  if (e instanceof NodiError) return json({ error: toErrorBody(e) }, e.status);
+  if (e instanceof NovaError) return json({ error: toErrorBody(e) }, e.status);
   console.error("unhandled", e instanceof Error ? e.message : String(e));
   return json({ error: toErrorBody(e) }, 500);
 };
@@ -68,16 +68,16 @@ export const uaHash = async (request: Request): Promise<string> =>
 
 export const readJson = async <T = Record<string, unknown>>(request: Request, maxBytes = 256_000): Promise<T> => {
   const len = Number(request.headers.get("content-length") ?? "0");
-  if (len > maxBytes) throw new NodiError("payload_too_large", "Request body is too large.", 413);
+  if (len > maxBytes) throw new NovaError("payload_too_large", "Request body is too large.", 413);
   const text = await request.text();
-  if (text.length > maxBytes) throw new NodiError("payload_too_large", "Request body is too large.", 413);
+  if (text.length > maxBytes) throw new NovaError("payload_too_large", "Request body is too large.", 413);
   if (!text) return {} as T;
   try {
     const v = JSON.parse(text);
     if (v === null || typeof v !== "object") throw new Error("not an object");
     return v as T;
   } catch {
-    throw new NodiError("invalid_json", "Send a JSON object.", 400);
+    throw new NovaError("invalid_json", "Send a JSON object.", 400);
   }
 };
 
