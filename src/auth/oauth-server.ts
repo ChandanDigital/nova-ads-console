@@ -39,7 +39,7 @@ export const protectedResourceMetadata = (origin: string) => ({
   authorization_servers: [origin],
   scopes_supported: [...AI_SCOPES],
   bearer_methods_supported: ["header"],
-  resource_name: "Nodi Ads MCP",
+  resource_name: "Nova Ads Console MCP",
 });
 
 export const authServerMetadata = (origin: string) => ({
