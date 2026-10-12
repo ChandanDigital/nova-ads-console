@@ -8,7 +8,7 @@ Environment: Windows 11, Node 22.23.2, Wrangler 4.149.0 (local workerd runtime),
 
 | Suite | Command | Result |
 |---|---|---|
-| Worker, in the Workers runtime | `npx vitest run` | **18 files, 278 tests, 0 failed** |
+| Worker, in the Workers runtime | `npx vitest run` | **18 files, 279 tests, 0 failed** |
 | Dashboard logic (DOM) | `npx vitest run -c vitest.ui.config.ts` | **1 file, 14 tests, 0 failed** |
 | Type check (strict) | `npm run typecheck` | no errors |
 | Python plugin (original 148 + 8 new) | `pytest tests` | **156 passed** |
@@ -38,7 +38,7 @@ Environment: Windows 11, Node 22.23.2, Wrangler 4.149.0 (local workerd runtime),
 | `security.test.ts` | 19 | **every** registered dashboard route answers 401 without a session; bearer tokens refused; hardening headers/CSP; no secret in any API response, audit row or database row; no MCP tool for approval/credentials/recovery; AI token cannot reach admin routes; smuggled `approved:true` ignored; personal-data GAQL and manager hierarchy denied; unallowed accounts invisible; revoke-all; token validation; quota limits enforced with a clear message and no paid fallback; D1 usage measured from D1 metadata |
 | `legacy.test.ts` | 5 | import of a file written by the real exporter (allowlist applied, history archived, **no live authority created**), secrets rejected, wrong format rejected |
 | `github-only.test.ts` | 3 | the GitHub Actions report is read-only (three reads, never a mutate), explains expired tokens and missing secrets |
-| `ui.test.ts` | 4 | dashboard files comply with the strict CSP (no inline script/style, no third-party URLs, no `innerHTML`/`eval`); the secret generator makes no network call |
+| `ui.test.ts` | 5 | dashboard files comply with the strict CSP (no inline script/style, no third-party URLs, no `innerHTML`/`eval`); the secret generator makes no network call |
 
 Dashboard DOM tests (`test-ui/views.test.ts`, 14; the new ones cover the recommendation action wording, the CSP-safe print button and the alerts card, with hostile alert text rendered as text): the approval screen shows exact before/after values and posts hash + only the ticked permissions + typed word + CSRF token; no approve button unless the plan awaits approval; hostile text from Google/AI renders as text (no element is created, no script runs); account switches; consent screen submits only the scopes/accounts left ticked; token creation shows the secret once; setup shows the credential once and enforces the "saved" box; login errors surface.
 
