@@ -2,7 +2,7 @@
   // Nodi Ads Cloud — one Worker serves the MCP endpoint, the OAuth server, the
   // dashboard API and the dashboard itself. Everything here is Cloudflare Free-plan compatible.
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "nodi-ads-cloudflare",
+  "name": "nova-ads-console",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
 
@@ -16,9 +16,9 @@
 
   // D1 (free: 5 GB, 5M rows read/day, 100k rows written/day). No database_id on purpose:
   // current Wrangler creates the database on first deploy. If your first deploy reports a
-  // D1 error, create "nodi-ads-db" in the Cloudflare dashboard and add its "database_id" here.
+  // D1 error, create "nova-ads-console-db" in the Cloudflare dashboard and add its "database_id" here.
   "d1_databases": [
-    { "binding": "DB", "database_name": "nodi-ads-db", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "nova-ads-console-db", "migrations_dir": "migrations" }
   ],
 
   // One daily maintenance run (free plan allows 5 cron triggers per account).
