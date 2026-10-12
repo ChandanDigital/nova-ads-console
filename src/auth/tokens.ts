@@ -44,7 +44,7 @@ export const issueApiToken = async (ctx: Ctx, adminId: string, input: { label?: 
   const days = Number(input.days ?? 30);
   if (!Number.isInteger(days) || days < 1 || days > 365) throw new NodiError("invalid_expiry", "Choose 1 to 365 days.", 400);
   const accounts = parseAccounts(input.accounts);
-  const token = "nodi_api_" + randomToken(32);
+  const token = "nova_api_" + randomToken(32);
   const id = randomId();
   const t = now();
   await ctx.db.run(
@@ -86,7 +86,7 @@ export const authenticateBearer = async (ctx: Ctx): Promise<Principal | null> =>
   const m = /^Bearer\s+([A-Za-z0-9._~+/=-]{20,300})$/.exec(header);
   if (!m) return null;
   const token = m[1]!;
-  if (token.startsWith("nodi_admin_")) return null; // the human credential never works as an AI token
+  if (token.startsWith("nova_admin_")) return null; // the human credential never works as an AI token
   const row = await ctx.db.first<{ id: string; kind: string; label: string; scopes: string; accounts: string | null; expires_at: number; revoked_at: number | null; last_used_at: number | null }>(
     "SELECT id, kind, label, scopes, accounts, expires_at, revoked_at, last_used_at FROM api_tokens WHERE token_hash = ? AND kind IN ('api','oauth_access')",
     await tokenHash(token),
