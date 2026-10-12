@@ -1,11 +1,11 @@
 # Nova Ads Console (cloud edition)
 
-A remote **MCP server**, **OAuth server** and **management dashboard** for Google Ads that runs on the **Cloudflare free plan** and is deployed from a **private GitHub repository**. It is the cloud edition of the local Python plugin "Nodi Ads" (0.2.0).
+A remote **MCP server**, **OAuth server** and **management dashboard** for Google Ads that runs on the **Cloudflare free plan** and is deployed from a **private GitHub repository**. It is the cloud edition of the local Python plugin "Nova Ads Console" (0.2.0).
 
 © 2026 Chandan Digital. Maintained and developed by [Chandan Digital](https://chandandigital.com/).
 
 - Read tools (accounts, campaign reports, keywords, search terms, audit, keyword research) work immediately after you connect Google.
-- Changes (new campaigns, budget, pause/enable, ad groups, keywords) are **drafted by AI, validated by Google, approved by a human in the dashboard, then executed**. No AI credential can approve anything.
+- Changes (new campaigns, budget, pause/enable, ad groups, keywords) are **drafted by AI, validated by Google, then run**: by an AI connection you gave the `apply` permission, or by you from the dashboard. New campaigns start paused, and you control the global stop and the daily budget cap.
 - No Python, Node.js, Docker, server or command line is needed to deploy or run it. Everything is done in browser dashboards.
 
 > **Status: release candidate.** The code is covered by 190+ automated tests that ran in the real Workers runtime against a faithful fake of Google. **It has not been run against a live Google Ads account, a live Cloudflare deployment, or a real Claude/ChatGPT app.** [`docs/live-checks.md`](docs/live-checks.md) lists exactly what still needs a live test. Start with a Google Ads *test account*.
@@ -16,8 +16,8 @@ A remote **MCP server**, **OAuth server** and **management dashboard** for Googl
 |---|---|
 | `/mcp` | Streamable HTTP MCP endpoint (official `@modelcontextprotocol/sdk`), 35 tools, OAuth 2.1 + PKCE or a pasted API token |
 | `/oauth/*`, `/.well-known/*` | Authorization server for AI apps (dynamic client registration, single-use codes, rotating refresh tokens) |
-| `/` dashboard | Overview, Google connection, accounts, performance, keywords, search terms, audit, **approval queue**, activity, AI access, credential security, diagnostics, hosting and quota monitor |
-| D1 database | Encrypted Google tokens, plans, approvals, audit log, usage counters |
+| `/` dashboard | Overview, Google connection, accounts, performance, keywords, search terms, audit, **plans**, activity, AI access, credential security, diagnostics, hosting and quota monitor |
+| D1 database | Encrypted Google tokens, plans, audit log, usage counters |
 | `github-only/` | Read-only weekly report in GitHub Actions for people who refuse Cloudflare (cannot serve an MCP endpoint) |
 
 ## Deploy in five steps (details: [`docs/setup.md`](docs/setup.md) · বাংলা: [`docs/setup-bn.md`](docs/setup-bn.md))
@@ -30,7 +30,7 @@ A remote **MCP server**, **OAuth server** and **management dashboard** for Googl
 
 ## Safety model in one paragraph
 
-Google tokens are sealed with AES-256-GCM in D1. The administrator credential is a random 256-bit value stored only as a hash; if it is lost, only the person who controls the Cloudflare account can replace it (using a one-time `ADMIN_SETUP_SECRET`), and nothing is ever "cracked" or decrypted. AI tokens have only `read`, `draft`, `apply` scopes; approval needs the signed-in dashboard session, a CSRF token, the exact plan hash and the typed word APPROVE. Plans are paused by default, re-validated with Google right before execution, executed at most once, never retried automatically, and blocked by a global stop switch. See [`docs/security.md`](docs/security.md).
+Google tokens are sealed with AES-256-GCM in D1. The administrator credential is a random 256-bit value stored only as a hash; if it is lost, only the person who controls the Cloudflare account can replace it (using a one-time `ADMIN_SETUP_SECRET`), and nothing is ever "cracked" or decrypted. AI tokens have only `read`, `draft`, `apply` scopes; changing settings needs the signed-in dashboard session, a CSRF token, the exact plan hash and the typed word APPROVE. Plans are paused by default, re-validated with Google right before execution, executed at most once, never retried automatically, and blocked by a global stop switch. See [`docs/security.md`](docs/security.md).
 
 ## Zero-cost operation
 
