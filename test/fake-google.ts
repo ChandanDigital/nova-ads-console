@@ -155,7 +155,7 @@ export class FakeGoogle {
   private recommend(cid: string, action: string, body: any): Response {
     if (this.recommendFailure) return this.json(this.recommendFailure.body, this.recommendFailure.status);
     const ops: { resourceName: string }[] = body.operations ?? [];
-    if (body.partialFailure !== false) return this.json({ error: { code: 400, message: "Nodi must send partialFailure=false" } }, 400);
+    if (body.partialFailure !== false) return this.json({ error: { code: 400, message: "Nova Ads must send partialFailure=false" } }, 400);
     for (const o of ops) if (!this.resources.has(o.resourceName)) return this.json({ error: { code: 404, message: "no such recommendation " + o.resourceName } }, 404);
     if (!this.recommendNoEffect) {
       for (const o of ops) {
