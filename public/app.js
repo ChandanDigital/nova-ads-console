@@ -40,7 +40,7 @@ const shell = () => {
   nav.setPending = (n) => { pending.textContent = String(n); pending.classList.toggle("hidden", !n); };
   const themeBtn = h("button", { class: "small", type: "button", onclick: () => { const cur = document.documentElement.getAttribute("data-theme"); setTheme(cur === "dark" ? "light" : cur === "light" ? "auto" : "dark"); toast("Theme: " + (document.documentElement.getAttribute("data-theme") ?? "auto")); } }, t("theme"));
   const signOut = h("button", { class: "small", type: "button", onclick: async () => { try { await api("POST", "/api/auth/logout"); } catch { /* already signed out */ } state.signedIn = false; state.csrf = null; location.hash = "#/login"; } }, t("signOut"));
-  mount(side, h("div", { class: "brand" }, h("span", { class: "logo" }, "N"), t("appName")), h("nav", { class: "nav" }, links), h("div", { class: "side-foot stack" }, h("div", { class: "row" }, themeBtn, signOut), h("div", { class: "muted small" }, "v0.3.0 · free-tier edition")));
+  mount(side, h("div", { class: "brand" }, h("span", { class: "logo" }, "N"), t("appName")), h("nav", { class: "nav" }, links), h("div", { class: "side-foot stack" }, h("div", { class: "row" }, themeBtn, signOut), h("div", { class: "muted small footer" }, h("div", {}, "Nova Ads Console v0.3.0"), h("div", {}, "© 2026 Chandan Digital"), h("div", {}, "Maintained & developed by ", h("a", { href: "https://chandandigital.com/", target: "_blank", rel: "noopener noreferrer" }, "Chandan Digital")))));
   const top = h("div", { class: "topbar" }, h("button", { class: "small", "aria-label": t("menu"), "aria-controls": "side", onclick: () => { side.classList.add("open"); scrim.classList.remove("hidden"); } }, "☰"), h("strong", {}, t("appName")));
   mount(root, h("div", { class: "app" }, side, h("div", {}, top, main), scrim));
   return main;
@@ -53,7 +53,7 @@ const route = async () => {
   if (!state.signedIn || page === "login") return showAuth();
   if (!main || !document.body.contains(main)) main = shell();
   for (const a of document.querySelectorAll(".nav a")) { if (a.dataset.key === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
-  document.title = `${t("nav_" + page) === "nav_" + page ? page : t("nav_" + page)} · Nodi Ads`;
+  document.title = `${t("nav_" + page) === "nav_" + page ? page : t("nav_" + page)} · Nova Ads Console`;
   const views = {
     overview: () => viewOverview(main, nav), connections: () => viewConnections(main, query), accounts: () => viewAccounts(main), performance: () => viewPerformance(main),
     approvals: () => viewApprovals(main, arg), activity: () => viewActivity(main), ai: () => viewAi(main), security: () => viewSecurity(main, () => {}),
