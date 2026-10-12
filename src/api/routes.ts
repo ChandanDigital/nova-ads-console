@@ -234,7 +234,7 @@ secured("GET", "/api/capabilities", async () => capabilityList());
 secured("GET", "/api/mcp-info", async (ctx) => ({
   mcp_url: `${ctx.origin}/mcp`,
   transport: "Streamable HTTP (stateless, JSON responses)",
-  auth: ["OAuth 2.1 + PKCE with dynamic client registration (Claude, ChatGPT, Gemini CLI)", "Authorization: Bearer nodi_api_... token created on the Tokens screen"],
+  auth: ["OAuth 2.1 + PKCE with dynamic client registration (Claude, ChatGPT, Gemini CLI)", "Authorization: Bearer nova_api_... token created on the Tokens screen"],
   discovery: [`${ctx.origin}/.well-known/oauth-protected-resource`, `${ctx.origin}/.well-known/oauth-authorization-server`],
   migrations: MIGRATIONS.map((m) => m.id),
   google_redirect_uri: `${ctx.origin}/oauth/google/callback`,
