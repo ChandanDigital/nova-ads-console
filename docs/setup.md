@@ -56,7 +56,7 @@ Secrets are never in GitHub and never in the page code.
 ## 6. Connect an AI app
 
 - **Claude (web / desktop):** Settings → Connectors → **Add custom connector** → paste `https://<your-worker>/mcp`. Claude registers itself; sign in to the dashboard when asked and approve. (Claude Desktop cannot use remote servers from its config file; use Connectors.)
-- **Claude Code:** `claude mcp add --transport http nodi-ads https://<your-worker>/mcp`, then `/mcp` to sign in, or create a token under *AI access* and add `--header "Authorization: Bearer <token>"`.
+- **Claude Code:** `claude mcp add --transport http nova-ads https://<your-worker>/mcp`, then `/mcp` to sign in, or create a token under *AI access* and add `--header "Authorization: Bearer <token>"`.
 - **Others (ChatGPT, Gemini CLI, Cursor):** add a remote MCP server with the same URL. These hosts have not been tested.
 
 Start with `read` + `draft` permissions. Add `apply` only when you want the AI to run plans **you** approved.
