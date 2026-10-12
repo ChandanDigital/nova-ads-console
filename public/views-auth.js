@@ -30,7 +30,7 @@ export const viewSetup = (root, rerender, afterAuth) => {
 };
 
 export const viewLogin = (root, rerender, afterAuth, showRecover) => {
-  const cred = h("input", { type: "password", autocomplete: "current-password", required: true, id: "credential", placeholder: "nodi_admin_…" });
+  const cred = h("input", { type: "password", autocomplete: "current-password", required: true, id: "credential", placeholder: "nova_admin_…" });
   const form = h("form", { class: "stack", onsubmit: guard(async (e) => {
     e.preventDefault();
     const r = await api("POST", "/api/auth/login", { credential: cred.value.trim() });
