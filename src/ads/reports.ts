@@ -1,7 +1,7 @@
 import type { Ctx, Principal } from "../lib/context";
 import { num } from "../env";
 import { now } from "../lib/db";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { randomId } from "../lib/crypto";
 import { adsFor, resolveAccount, type AccountRow } from "./accounts";
 import { boundedGaql, camelToSnake, dateWindow, gaqlString } from "../google/gaql";
@@ -16,7 +16,7 @@ const snake = (k: string): string => {
   return r;
 };
 /**
- * Converts Google's camelCase JSON keys to the snake_case field names used by GAQL and by the original Nodi Ads tools.
+ * Converts Google's camelCase JSON keys to the snake_case field names used by GAQL and by the original Python plugin tools.
  * Written as plain loops with a key cache: the Free plan allows only 10 ms of CPU per request (about 7x faster than the naive version).
  */
 export const snakeKeys = (v: unknown): unknown => {
@@ -93,7 +93,7 @@ export const SEGMENT_NAMES = Object.keys(SEGMENTS);
 
 export const segmentQuery = (segment: string, w: string): string => {
   const s = SEGMENTS[segment];
-  if (!s) throw new NodiError("invalid_segment", `Choose one of: ${SEGMENT_NAMES.join(", ")}.`, 400);
+  if (!s) throw new NovaError("invalid_segment", `Choose one of: ${SEGMENT_NAMES.join(", ")}.`, 400);
   return `SELECT campaign.id, campaign.name, ${s[1]}, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value FROM ${s[0]} WHERE ${w} ORDER BY metrics.cost_micros DESC`;
 };
 
@@ -158,14 +158,14 @@ export const pacingMath = (monthlyTotal: string, spentMicros: bigint, timezone: 
 
 /** Account-local month pacing against a monthly total, for the campaigns named in `campaignIds`. */
 export const budgetPacing = async (ctx: Ctx, p: Principal, id: string, monthlyTotal: string, campaignIds: string[]) => {
-  if (!campaignIds.length || campaignIds.some((c) => !/^\d+$/.test(c))) throw new NodiError("needs_budget_scope", "Name the numeric IDs of the campaigns that share the monthly amount.", 400);
+  if (!campaignIds.length || campaignIds.some((c) => !/^\d+$/.test(c))) throw new NovaError("needs_budget_scope", "Name the numeric IDs of the campaigns that share the monthly amount.", 400);
   const account = await resolveAccount(ctx, p, id, "read");
   const tz = account.timezone ?? "UTC";
   const window = pacingMath(monthlyTotal, 0n, tz);
   const perf = await getPerformance(ctx, p, id, window.first_of_month, window.account_local_date, 1000);
-  if (perf.truncated) throw new NodiError("incomplete_scope", "Pacing needs the complete campaign data.", 400);
+  if (perf.truncated) throw new NovaError("incomplete_scope", "Pacing needs the complete campaign data.", 400);
   const rows = (perf.rows as any[]).filter((r) => campaignIds.includes(String(r.campaign?.id)));
-  if (new Set(rows.map((r) => String(r.campaign.id))).size !== new Set(campaignIds).size) throw new NodiError("missing_campaign", "One or more scoped campaigns are unavailable.", 404);
+  if (new Set(rows.map((r) => String(r.campaign.id))).size !== new Set(campaignIds).size) throw new NovaError("missing_campaign", "One or more scoped campaigns are unavailable.", 404);
   const spent = rows.reduce((s, r) => s + BigInt(r.metrics?.cost_micros ?? 0), 0n);
   return { ...pacingMath(monthlyTotal, spent, tz), currency: account.currency };
 };
@@ -176,9 +176,9 @@ export const researchKeywords = async (
   a: { keywords: string[]; geo_targets: string[]; language_id: string; url?: string; historical?: boolean },
 ) => {
   const account = await resolveAccount(ctx, p, id, "read");
-  if (a.keywords.length < 1 || a.keywords.length > 20) throw new NodiError("invalid_keywords", "Send 1 to 20 seed keywords.", 400);
-  if (a.geo_targets.length > 20 || a.geo_targets.some((g) => !/^geoTargetConstants\/\d+$/.test(g))) throw new NodiError("invalid_location", "Use verified geoTargetConstants/<id> values.", 400);
-  if (!/^\d+$/.test(a.language_id)) throw new NodiError("invalid_language", "Use a numeric language constant ID.", 400);
+  if (a.keywords.length < 1 || a.keywords.length > 20) throw new NovaError("invalid_keywords", "Send 1 to 20 seed keywords.", 400);
+  if (a.geo_targets.length > 20 || a.geo_targets.some((g) => !/^geoTargetConstants\/\d+$/.test(g))) throw new NovaError("invalid_location", "Use verified geoTargetConstants/<id> values.", 400);
+  if (!/^\d+$/.test(a.language_id)) throw new NovaError("invalid_language", "Use a numeric language constant ID.", 400);
   const ads = adsFor(ctx, account);
   const common = { language: `languageConstants/${a.language_id}`, geoTargetConstants: a.geo_targets, keywordPlanNetwork: "GOOGLE_SEARCH" };
   if (a.historical) {
@@ -196,7 +196,7 @@ export const researchKeywords = async (
 
 export const searchGeoTargets = async (ctx: Ctx, p: Principal, id: string, names: string[], countryCode?: string, locale = "en") => {
   const account = await resolveAccount(ctx, p, id, "read");
-  if (names.length < 1 || names.length > 25 || names.some((n) => !n.trim() || n.length > 80)) throw new NodiError("invalid_location", "Send 1 to 25 location names.", 400);
+  if (names.length < 1 || names.length > 25 || names.some((n) => !n.trim() || n.length > 80)) throw new NovaError("invalid_location", "Send 1 to 25 location names.", 400);
   const body: Record<string, unknown> = { locale, locationNames: { names } };
   if (countryCode) body.countryCode = countryCode;
   const r = await adsFor(ctx, account).post<{ geoTargetConstantSuggestions?: unknown[] }>("geoTargetConstants:suggest", body);
@@ -205,13 +205,13 @@ export const searchGeoTargets = async (ctx: Ctx, p: Principal, id: string, names
 
 /** Field metadata (compatible with the official Google Ads MCP `get_resource_metadata`). Field metadata is global, so any active connection can answer. */
 export const getResourceMetadata = async (ctx: Ctx, p: Principal, id: string | undefined, resource: string) => {
-  if (!/^[a-z_]+$/.test(resource)) throw new NodiError("invalid_resource", "Use a resource name such as campaign.", 400);
+  if (!/^[a-z_]+$/.test(resource)) throw new NovaError("invalid_resource", "Use a resource name such as campaign.", 400);
   let ads;
   if (id) ads = adsFor(ctx, await resolveAccount(ctx, p, id, "read"));
   else {
-    if (p.kind !== "admin" && !p.scopes.includes("read")) throw new NodiError("forbidden", "This credential lacks the read permission.", 403);
+    if (p.kind !== "admin" && !p.scopes.includes("read")) throw new NovaError("forbidden", "This credential lacks the read permission.", 403);
     const conn = await ctx.db.first<{ id: string }>("SELECT id FROM google_connections WHERE status = 'active' ORDER BY created_at LIMIT 1");
-    if (!conn) throw new NodiError("not_connected", "Connect Google in the dashboard first.", 409);
+    if (!conn) throw new NovaError("not_connected", "Connect Google in the dashboard first.", 409);
     const { AdsClient } = await import("../google/ads");
     ads = new AdsClient(ctx.env, ctx.db, { connectionId: conn.id });
   }
@@ -223,7 +223,7 @@ export const getResourceMetadata = async (ctx: Ctx, p: Principal, id: string | u
 
 export const listAccessible = async (ctx: Ctx, p: Principal, connectionId?: string) => {
   const conn = connectionId ?? (await ctx.db.first<{ id: string }>("SELECT id FROM google_connections WHERE status = 'active' ORDER BY created_at LIMIT 1"))?.id;
-  if (!conn) throw new NodiError("not_connected", "Connect Google in the dashboard first.", 409);
+  if (!conn) throw new NovaError("not_connected", "Connect Google in the dashboard first.", 409);
   const { AdsClient } = await import("../google/ads");
   const ids = await new AdsClient(ctx.env, ctx.db, { connectionId: conn }).listAccessibleCustomers();
   // AI callers only learn about IDs the administrator allowed; the dashboard shows everything.

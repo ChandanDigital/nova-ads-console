@@ -59,13 +59,13 @@ Secrets are never in GitHub and never in the page code.
 - **Claude Code:** `claude mcp add --transport http nova-ads https://<your-worker>/mcp`, then `/mcp` to sign in, or create a token under *AI access* and add `--header "Authorization: Bearer <token>"`.
 - **Others (ChatGPT, Gemini CLI, Cursor):** add a remote MCP server with the same URL. These hosts have not been tested.
 
-Start with `read` + `draft` permissions. Add `apply` only when you want the AI to run plans **you** approved.
+Start with `read` + `draft` permissions. Add `apply` only for AI apps you trust to run validated plans without asking you each time.
 
 ## 7. A first safe change
 
 1. Ask the AI: "Draft a budget change for campaign X to 300 and explain it."
-2. Open *Approvals*. Read the before/after values, spending effect and recovery limit. Tick the permission classes, type `APPROVE`, press the button.
-3. Ask the AI to execute the plan. It runs once, paused/enabled exactly as reviewed. Check *Activity*.
+2. Open *Plans*. Read the before/after values, spending effect and recovery limit.
+3. Press **Run this plan now** (or, if the connection has `apply`, ask the AI to execute it). It runs once, exactly as shown. Check *Activity*.
 
 ## Updating, backup, undo
 

@@ -1,7 +1,7 @@
 import type { Ctx } from "../lib/context";
 import { AI_SCOPES } from "../lib/context";
 import { now } from "../lib/db";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { b64uEncode, randomId, randomToken, sha256B64u, sha256Hex, timingSafeEqual } from "../lib/crypto";
 import { audit } from "../lib/audit";
 import { escapeHtml, json, redirect, SECURITY_HEADERS } from "../lib/http";
@@ -13,7 +13,7 @@ import { parseAccounts, tokenHash } from "./tokens";
  *  - Dynamic client registration (RFC 7591), PKCE S256 required, exact redirect_uri match
  *  - Authorization codes: single use, 5 minutes. Access tokens 1 hour. Refresh tokens 30 days, rotated on every use;
  *    replaying a used refresh token revokes the whole grant.
- *  - The human consent step is the signed-in dashboard; AI scopes are read/draft/apply only (never approval).
+ *  - The human consent step is the signed-in dashboard; AI scopes are read/draft/apply only (never credentials or settings).
  */
 const ACCESS_TTL = 3600;
 const REFRESH_TTL = 30 * 86400;
@@ -59,15 +59,15 @@ const BAD_SCHEMES = new Set(["javascript:", "data:", "file:", "vbscript:", "blob
 const isLoopback = (u: URL) => ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname);
 
 const validRedirect = (raw: unknown): string => {
-  if (typeof raw !== "string" || raw.length > 500) throw new NodiError("invalid_redirect_uri", "Invalid redirect URI.", 400);
+  if (typeof raw !== "string" || raw.length > 500) throw new NovaError("invalid_redirect_uri", "Invalid redirect URI.", 400);
   let u: URL;
   try {
     u = new URL(raw);
   } catch {
-    throw new NodiError("invalid_redirect_uri", "Redirect URIs must be absolute URLs.", 400);
+    throw new NovaError("invalid_redirect_uri", "Redirect URIs must be absolute URLs.", 400);
   }
-  if (u.hash || BAD_SCHEMES.has(u.protocol) || u.username || u.password) throw new NodiError("invalid_redirect_uri", "Redirect URI is not allowed.", 400);
-  if (u.protocol === "http:" && !isLoopback(u)) throw new NodiError("invalid_redirect_uri", "http redirect URIs are allowed only for localhost.", 400);
+  if (u.hash || BAD_SCHEMES.has(u.protocol) || u.username || u.password) throw new NovaError("invalid_redirect_uri", "Redirect URI is not allowed.", 400);
+  if (u.protocol === "http:" && !isLoopback(u)) throw new NovaError("invalid_redirect_uri", "http redirect URIs are allowed only for localhost.", 400);
   return raw;
 };
 
@@ -82,10 +82,10 @@ export const registerClient = async (ctx: Ctx, body: Record<string, unknown>): P
   let redirects: string[];
   try {
     const list = body.redirect_uris;
-    if (!Array.isArray(list) || list.length < 1 || list.length > 5) throw new NodiError("invalid_redirect_uri", "Send 1 to 5 redirect_uris.", 400);
+    if (!Array.isArray(list) || list.length < 1 || list.length > 5) throw new NovaError("invalid_redirect_uri", "Send 1 to 5 redirect_uris.", 400);
     redirects = list.map(validRedirect);
   } catch (e) {
-    return oauthError("invalid_redirect_uri", e instanceof NodiError ? e.message : "Invalid redirect URIs.");
+    return oauthError("invalid_redirect_uri", e instanceof NovaError ? e.message : "Invalid redirect URIs.");
   }
   const method = String(body.token_endpoint_auth_method ?? "none");
   if (!["none", "client_secret_post", "client_secret_basic"].includes(method)) return oauthError("invalid_client_metadata", "Unsupported token_endpoint_auth_method.");
@@ -153,7 +153,7 @@ export const authorize = async (ctx: Ctx): Promise<Response> => {
 // ------------------------------------------------------------------ consent (called by the dashboard, admin session + CSRF)
 export const pendingDetails = async (ctx: Ctx, id: string) => {
   const row = await ctx.db.first<{ client_id: string; redirect_uri: string; scopes: string; expires_at: number }>("SELECT * FROM oauth_pending WHERE id_hash = ?", await sha256Hex("pending:" + id));
-  if (!row || row.expires_at < now()) throw new NodiError("request_expired", "This connection request expired. Start again from your AI app.", 410);
+  if (!row || row.expires_at < now()) throw new NovaError("request_expired", "This connection request expired. Start again from your AI app.", 410);
   const client = await getClient(ctx, row.client_id);
   const accounts = await ctx.db.all<{ customer_id: string; name: string | null }>("SELECT customer_id, name FROM accounts WHERE allowed = 1 ORDER BY name");
   return {
@@ -170,7 +170,7 @@ export const decide = async (ctx: Ctx, adminId: string, id: string, body: { appr
     "DELETE FROM oauth_pending WHERE id_hash = ? RETURNING *",
     key,
   );
-  if (!row || row.expires_at < now()) throw new NodiError("request_expired", "This connection request expired. Start again from your AI app.", 410);
+  if (!row || row.expires_at < now()) throw new NovaError("request_expired", "This connection request expired. Start again from your AI app.", 410);
   const target = new URL(row.redirect_uri);
   if (body.approve !== true) {
     target.searchParams.set("error", "access_denied");
@@ -180,7 +180,7 @@ export const decide = async (ctx: Ctx, adminId: string, id: string, body: { appr
   }
   const requested = JSON.parse(row.scopes) as string[];
   const chosen = Array.isArray(body.scopes) ? (body.scopes as string[]).filter((s) => requested.includes(s)) : requested;
-  if (!chosen.length) throw new NodiError("invalid_scope", "Choose at least one permission.", 400);
+  if (!chosen.length) throw new NovaError("invalid_scope", "Choose at least one permission.", 400);
   const accounts = parseAccounts(body.accounts ?? null);
   const code = "nova_ac_" + randomToken(32);
   await ctx.db.run(
@@ -196,13 +196,13 @@ export const decide = async (ctx: Ctx, adminId: string, id: string, body: { appr
 // ------------------------------------------------------------------ token endpoint
 const readForm = async (request: Request): Promise<URLSearchParams> => {
   const ct = request.headers.get("content-type") ?? "";
-  if (Number(request.headers.get("content-length") ?? "0") > 20_000) throw new NodiError("invalid_request", "Request too large.", 413);
+  if (Number(request.headers.get("content-length") ?? "0") > 20_000) throw new NovaError("invalid_request", "Request too large.", 413);
   if (ct.includes("application/x-www-form-urlencoded")) {
     const fd = await request.formData();
     return new URLSearchParams([...fd.entries()].map(([k, v]) => [k, String(v)] as [string, string]));
   }
   const text = await request.text();
-  if (text.length > 20_000) throw new NodiError("invalid_request", "Request too large.", 413);
+  if (text.length > 20_000) throw new NovaError("invalid_request", "Request too large.", 413);
   if (ct.includes("application/json")) {
     const o = JSON.parse(text || "{}") as Record<string, unknown>;
     return new URLSearchParams(Object.entries(o).map(([k, v]) => [k, String(v)] as [string, string]));

@@ -1,6 +1,6 @@
 import type { Ctx, Principal } from "../lib/context";
 import { now } from "../lib/db";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { audit } from "../lib/audit";
 import { AdsClient } from "../google/ads";
 import { customerId } from "../google/gaql";
@@ -38,14 +38,14 @@ export const getAccountRow = (ctx: Ctx, id: string): Promise<AccountRow | null> 
  */
 export const resolveAccount = async (ctx: Ctx, p: Principal, id: string, scope: "read" | "draft" | "apply" = "read"): Promise<AccountRow> => {
   const cid = customerId(id);
-  if (p.kind !== "admin" && !p.scopes.includes(scope)) throw new NodiError("forbidden", `This credential lacks the ${scope} permission.`, 403);
+  if (p.kind !== "admin" && !p.scopes.includes(scope)) throw new NovaError("forbidden", `This credential lacks the ${scope} permission.`, 403);
   const row = await getAccountRow(ctx, cid);
-  if (!row) throw new NodiError("account_not_found", "Unknown account. Ask the administrator to run discovery or add the account in the dashboard.", 404);
+  if (!row) throw new NovaError("account_not_found", "Unknown account. Ask the administrator to run discovery or add the account in the dashboard.", 404);
   if (p.kind !== "admin") {
-    if (!row.allowed) throw new NodiError("account_not_allowed", "The administrator has not allowed AI access to this account.", 403);
-    if (p.accounts && !p.accounts.includes(cid)) throw new NodiError("account_not_allowed", "This credential is not allowed to use this account.", 403);
+    if (!row.allowed) throw new NovaError("account_not_allowed", "The administrator has not allowed AI access to this account.", 403);
+    if (p.accounts && !p.accounts.includes(cid)) throw new NovaError("account_not_allowed", "This credential is not allowed to use this account.", 403);
   }
-  if (!row.connection_id) throw new NodiError("not_connected", "This account has no Google connection. Connect Google and run discovery.", 409);
+  if (!row.connection_id) throw new NovaError("not_connected", "This account has no Google connection. Connect Google and run discovery.", 409);
   return row;
 };
 
@@ -93,8 +93,8 @@ export const discoverAccounts = async (ctx: Ctx, connectionId: string): Promise<
         if (h.truncated) result.errors.push({ account_id: root, code: "discovery_truncated" });
       }
     } catch (e) {
-      if (e instanceof NodiError && (e.code === "credentials_expired" || e.code === "quota_soft_limit")) throw e;
-      result.errors.push({ account_id: root, code: e instanceof NodiError ? e.code : "error", request_id: e instanceof NodiError ? e.requestId : undefined });
+      if (e instanceof NovaError && (e.code === "credentials_expired" || e.code === "quota_soft_limit")) throw e;
+      result.errors.push({ account_id: root, code: e instanceof NovaError ? e.code : "error", request_id: e instanceof NovaError ? e.requestId : undefined });
     }
   }
 
@@ -118,7 +118,7 @@ export const refreshIdentity = async (ctx: Ctx, account: AccountRow): Promise<Ac
   const ads = adsFor(ctx, account);
   const r = await ads.search(account.customer_id, IDENTITY_QUERY, 1);
   const c = r.rows[0]?.customer;
-  if (!c) throw new NodiError("account_inaccessible", "Google returned no account identity.", 403);
+  if (!c) throw new NovaError("account_inaccessible", "Google returned no account identity.", 403);
   await ctx.db.run(
     "UPDATE accounts SET name = ?, currency = ?, timezone = ?, manager = ?, status = ?, updated_at = ? WHERE customer_id = ?",
     c.descriptiveName ?? "Unnamed account", c.currencyCode, c.timeZone, asBool(c.manager), c.status ?? "UNKNOWN", now(), account.customer_id,
@@ -146,6 +146,6 @@ export const addAccount = async (ctx: Ctx, id: string, loginCustomerId: string |
 export const setAllowed = async (ctx: Ctx, id: string, allowed: boolean): Promise<void> => {
   const cid = customerId(id);
   const n = await ctx.db.run("UPDATE accounts SET allowed = ?, updated_at = ? WHERE customer_id = ?", allowed ? 1 : 0, now(), cid);
-  if (!n) throw new NodiError("account_not_found", "Unknown account.", 404);
+  if (!n) throw new NovaError("account_not_found", "Unknown account.", 404);
   await audit(ctx.db, { actor_type: "admin", action: allowed ? "account_allowed" : "account_blocked", target: cid, outcome: "ok", ip_hash: ctx.ipHash });
 };

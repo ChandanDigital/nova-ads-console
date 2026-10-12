@@ -1,4 +1,4 @@
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 
 /**
  * Lightweight, read-only landing-page check. It fetches the public page once (https only, no credentials, no private hosts,
@@ -15,9 +15,9 @@ const privateHost = (h: string): boolean =>
 
 export const checkPublicUrl = (raw: string): URL => {
   let u: URL;
-  try { u = new URL(raw); } catch { throw new NodiError("invalid_url", "Send an absolute https:// URL.", 400); }
-  if (raw.length > 2000 || u.protocol !== "https:" || u.username || u.password || (u.port && u.port !== "443")) throw new NodiError("invalid_url", "Only plain https:// URLs on the default port, without credentials, can be inspected.", 400);
-  if (privateHost(u.hostname)) throw new NodiError("invalid_url", "Private, local and IP-address hosts cannot be inspected.", 400);
+  try { u = new URL(raw); } catch { throw new NovaError("invalid_url", "Send an absolute https:// URL.", 400); }
+  if (raw.length > 2000 || u.protocol !== "https:" || u.username || u.password || (u.port && u.port !== "443")) throw new NovaError("invalid_url", "Only plain https:// URLs on the default port, without credentials, can be inspected.", 400);
+  if (privateHost(u.hostname)) throw new NovaError("invalid_url", "Private, local and IP-address hosts cannot be inspected.", 400);
   return u;
 };
 
@@ -58,12 +58,12 @@ export const inspectLandingPage = async (rawUrl: string): Promise<LandingReport>
   let res: Response | null = null;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     try {
-      res = await fetch(url.toString(), { redirect: "manual", headers: { accept: "text/html,application/xhtml+xml", "user-agent": "NodiAdsLandingCheck/0.3 (+read-only)" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+      res = await fetch(url.toString(), { redirect: "manual", headers: { accept: "text/html,application/xhtml+xml", "user-agent": "NovaAdsLandingCheck/0.3 (+read-only)" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
     } catch {
-      throw new NodiError("page_unreachable", "The page did not answer within 8 seconds or could not be reached.", 502);
+      throw new NovaError("page_unreachable", "The page did not answer within 8 seconds or could not be reached.", 502);
     }
     if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
-      if (hop === MAX_REDIRECTS) throw new NodiError("too_many_redirects", "The page redirects more than 4 times.", 502);
+      if (hop === MAX_REDIRECTS) throw new NovaError("too_many_redirects", "The page redirects more than 4 times.", 502);
       const next = checkPublicUrl(new URL(res.headers.get("location")!, url).toString());
       redirects.push({ status: res.status, to: next.toString() });
       await res.body?.cancel();

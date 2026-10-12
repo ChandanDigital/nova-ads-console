@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { NodiError } from "./errors";
+import { NovaError } from "./errors";
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -53,10 +53,10 @@ const importKey = (raw: string): Promise<{ id: string; key: CryptoKey }> => {
       try {
         bytes = Uint8Array.from(atob(raw.trim()), (c) => c.charCodeAt(0));
       } catch {
-        throw new NodiError("bad_encryption_key", "TOKEN_ENCRYPTION_KEY is not valid base64.", 500);
+        throw new NovaError("bad_encryption_key", "TOKEN_ENCRYPTION_KEY is not valid base64.", 500);
       }
       if (bytes.length !== 32) {
-        throw new NodiError("bad_encryption_key", "TOKEN_ENCRYPTION_KEY must decode to exactly 32 bytes.", 500);
+        throw new NovaError("bad_encryption_key", "TOKEN_ENCRYPTION_KEY must decode to exactly 32 bytes.", 500);
       }
       const id = (await sha256Hex("keyid:" + raw.trim())).slice(0, 8);
       const key = await crypto.subtle.importKey("raw", bytes, "AES-GCM", false, ["encrypt", "decrypt"]);
@@ -78,7 +78,7 @@ export const encryptionKeyProblem = async (env: Env): Promise<string | null> => 
 };
 
 export const encryptText = async (env: Env, plaintext: string, aad: string): Promise<string> => {
-  if (!env.TOKEN_ENCRYPTION_KEY) throw new NodiError("missing_encryption_key", "TOKEN_ENCRYPTION_KEY secret is not set.", 500);
+  if (!env.TOKEN_ENCRYPTION_KEY) throw new NovaError("missing_encryption_key", "TOKEN_ENCRYPTION_KEY secret is not set.", 500);
   const { id, key } = await importKey(env.TOKEN_ENCRYPTION_KEY);
   const iv = randomBytes(12);
   const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: enc.encode(aad) }, key, enc.encode(plaintext));
@@ -87,7 +87,7 @@ export const encryptText = async (env: Env, plaintext: string, aad: string): Pro
 
 export const decryptText = async (env: Env, sealed: string, aad: string): Promise<string> => {
   const parts = sealed.split(".");
-  if (parts.length !== 4 || parts[0] !== "v1") throw new NodiError("bad_ciphertext", "Stored secret has an unknown format.", 500);
+  if (parts.length !== 4 || parts[0] !== "v1") throw new NovaError("bad_ciphertext", "Stored secret has an unknown format.", 500);
   const candidates = [env.TOKEN_ENCRYPTION_KEY, env.TOKEN_ENCRYPTION_KEY_PREVIOUS].filter(Boolean) as string[];
   for (const raw of candidates) {
     const { id, key } = await importKey(raw);
@@ -100,10 +100,10 @@ export const decryptText = async (env: Env, sealed: string, aad: string): Promis
       );
       return dec.decode(pt);
     } catch {
-      throw new NodiError("decrypt_failed", "A stored secret could not be decrypted (wrong key or tampered data).", 500);
+      throw new NovaError("decrypt_failed", "A stored secret could not be decrypted (wrong key or tampered data).", 500);
     }
   }
-  throw new NodiError(
+  throw new NovaError(
     "encryption_key_changed",
     "TOKEN_ENCRYPTION_KEY differs from the key that sealed the stored Google connection. Restore the old key (or set it as TOKEN_ENCRYPTION_KEY_PREVIOUS) or reconnect Google.",
     500,

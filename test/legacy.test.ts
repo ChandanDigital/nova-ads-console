@@ -8,6 +8,14 @@ let s: Session;
 beforeEach(async () => { await resetDb(); s = await setupAdmin(); });
 
 describe("migration from the local Python version", () => {
+  it("accepts both spellings of the export format (old nodi-ads and new nova-ads)", async () => {
+    for (const format of ["nodi-ads-legacy-export/1", "nova-ads-legacy-export/1"]) {
+      const r = await call("/api/admin/import-legacy", { method: "POST", session: s, body: { export: { ...legacy, format }, apply_allowlist: false } });
+      expect(r.status, format + " " + r.text).toBe(200);
+    }
+    const bad = await call("/api/admin/import-legacy", { method: "POST", session: s, body: { export: { ...legacy, format: "other/1" } } });
+    expect(bad.status).toBe(400);
+  });
   it("imports the allowlist and archives plans, approvals and history without creating live authority", async () => {
     const r = await call("/api/admin/import-legacy", { method: "POST", session: s, body: { export: legacy, apply_allowlist: true } });
     expect(r.status, r.text).toBe(200);

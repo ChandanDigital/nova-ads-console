@@ -15,13 +15,13 @@
                             | D1 (SQLite)               | fetch (HTTPS)
                             v                           v
                  tokens (sealed), plans,        Google OAuth + Google Ads REST API (v25)
-                 approvals, audit, usage        no developer token
+                 audit, usage                   no developer token
 ```
 
 ## Why this shape
 
 - GitHub Pages cannot run server code and is public-only for free private-repo owners; GitHub Actions cannot host a permanent endpoint. So the Worker serves everything, which also makes the dashboard same-origin (no CORS, simple cookies).
-- The official Google Ads MCP server is a Python package. It is **not** run inside Workers. This project reimplements its three tools (`search`, `get_resource_metadata`, `list_accessible_customers`) in TypeScript over Google's REST API, keeping their argument names, and adds the Nodi planning/approval layer.
+- The official Google Ads MCP server is a Python package. It is **not** run inside Workers. This project reimplements its three tools (`search`, `get_resource_metadata`, `list_accessible_customers`) in TypeScript over Google's REST API, keeping their argument names, and adds the Nova Ads Console planning and validation layer.
 - Stateless MCP (no sessions, JSON responses): fits Workers, needs no Durable Objects and no KV. State lives only in D1.
 
 ## Source map
@@ -38,7 +38,7 @@
 | `src/ads/accounts.ts` | discovery (incl. manager hierarchy), allow-list |
 | `src/ads/reports.ts`, `audit.ts` | read tools, pacing, audit |
 | `src/ads/plans.ts` | plan model, hashing, validation, Search campaign builder |
-| `src/ads/planner.ts`, `execute.ts` | drafting with previous values; validate, approve, execute, reconcile, recover |
+| `src/ads/planner.ts`, `execute.ts` | drafting with previous values; validate, execute, cancel, reconcile, recover |
 | `src/mcp/server.ts` | tool definitions |
 | `src/lib/*` | crypto (AES-GCM, hashes), D1 wrapper with usage meter, migrations, audit log, quotas |
 | `public/` | dashboard (vanilla JS, no build step, strict CSP) |
@@ -46,7 +46,7 @@
 
 ## Data model (D1)
 
-`admin`, `sessions`, `rate_limits`, `used_setup_secrets`, `settings`, `api_tokens` (API + OAuth access/refresh), `oauth_clients/pending/codes`, `google_oauth_states`, `google_connections` (sealed tokens), `accounts` (allow flag), `plans`, `approvals`, `executions`, `evidence`, `reports`, `audit_log`, `usage_daily`, `legacy_import`. Migrations are additive-only and applied automatically; `migrations/*.sql` is generated from the same source for those who prefer `wrangler d1 migrations`.
+`admin`, `sessions`, `rate_limits`, `used_setup_secrets`, `settings`, `api_tokens` (API + OAuth access/refresh), `oauth_clients/pending/codes`, `google_oauth_states`, `google_connections` (sealed tokens), `accounts` (allow flag), `plans`, `approvals` (kept for old data, no longer used), `executions`, `evidence`, `reports`, `audit_log`, `usage_daily`, `legacy_import`. Migrations are additive-only and applied automatically; `migrations/*.sql` is generated from the same source for those who prefer `wrangler d1 migrations`.
 
 ## Google Ads API notes
 

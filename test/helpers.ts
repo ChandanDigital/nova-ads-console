@@ -5,7 +5,7 @@ export const workerFetch = (req: Request): Promise<Response> => (exports as any)
 import { resetSchemaCacheForTests } from "../src/lib/db";
 import worker from "../src/index";
 
-export const ORIGIN = "https://nodi.example.workers.dev";
+export const ORIGIN = "https://nova.example.workers.dev";
 export const SETUP_SECRET = "test-setup-secret-0123456789abcdef0123456789";
 
 const TABLES = [

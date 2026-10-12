@@ -1,13 +1,13 @@
 import { z } from "zod";
 import type { Ctx } from "../lib/context";
 import { now } from "../lib/db";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { audit } from "../lib/audit";
 import { randomId } from "../lib/crypto";
 import { customerId } from "../google/gaql";
 
 /**
- * Imports the non-secret part of an existing local Nodi Ads installation (written by tools/export_legacy.py).
+ * Imports the non-secret part of an existing local Nova Ads Console installation (written by tools/export_legacy.py).
  * It never accepts credentials: any key that looks like a secret makes the whole import fail.
  * Imported plans/approvals/history are kept as a READ-ONLY archive. Legacy approvals can never authorise a new-format plan.
  */
@@ -39,7 +39,7 @@ const Account = z.object({
 });
 
 const LegacySchema = z.object({
-  format: z.literal("nodi-ads-legacy-export/1"),
+  format: z.enum(["nova-ads-legacy-export/1", "nodi-ads-legacy-export/1"]), // the old spelling is still accepted: exports made by earlier versions
   exported_at: z.string(),
   source: z.record(z.string(), z.any()).optional(),
   clients: z.array(z.record(z.string(), z.any())).max(50).default([]),
@@ -54,9 +54,9 @@ const LegacySchema = z.object({
 
 export const importLegacy = async (ctx: Ctx, adminId: string, body: unknown, applyAllowlist: boolean) => {
   const leak = scanForSecrets(body);
-  if (leak) throw new NodiError("legacy_contains_secrets", `The file contains something that looks like a secret at ${leak}. Re-run tools/export_legacy.py; it never writes credentials.`, 400);
+  if (leak) throw new NovaError("legacy_contains_secrets", `The file contains something that looks like a secret at ${leak}. Re-run tools/export_legacy.py; it never writes credentials.`, 400);
   const parsed = LegacySchema.safeParse(body);
-  if (!parsed.success) throw new NodiError("invalid_legacy_file", "This is not a nodi-ads-legacy-export/1 file.", 400, parsed.error.issues.slice(0, 5).map((i) => ({ field: i.path.join("."), problem: i.message })));
+  if (!parsed.success) throw new NovaError("invalid_legacy_file", "This is not a nova-ads-legacy-export/1 file.", 400, parsed.error.issues.slice(0, 5).map((i) => ({ field: i.path.join("."), problem: i.message })));
   const d = parsed.data;
   const t = now();
   const batch = (["clients", "accounts", "plans", "approvals", "history", "standing_permissions"] as const).map((kind) => ({

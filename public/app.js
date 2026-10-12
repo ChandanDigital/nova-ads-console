@@ -1,6 +1,6 @@
 import { api, clear, h, icon, mount, setTheme, state, t, toast } from "/core.js";
 import { viewLogin, viewRecover, viewSetup } from "/views-auth.js";
-import { viewAccounts, viewActivity, viewAi, viewApprovals, viewConnections, viewConsent, viewDiagnostics, viewHosting, viewOverview, viewPerformance, viewSecurity } from "/views-main.js";
+import { viewAccounts, viewActivity, viewAi, viewPlans, viewConnections, viewConsent, viewDiagnostics, viewHosting, viewOverview, viewPerformance, viewSecurity } from "/views-main.js";
 
 const root = document.getElementById("root");
 // CSP forbids inline handlers, so printing is wired once here for every [data-print] button.
@@ -11,7 +11,7 @@ const NAV = [
   ["connections", "nav_connections", "M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"],
   ["accounts", "nav_accounts", "M4 6h16M4 12h16M4 18h10"],
   ["performance", "nav_performance", "M4 20V10M10 20V4M16 20v-8M22 20H2"],
-  ["approvals", "nav_approvals", "M5 13l4 4L19 7"],
+  ["plans", "nav_plans", "M5 13l4 4L19 7"],
   ["activity", "nav_activity", "M12 8v5l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z"],
   ["ai", "nav_ai", "M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"],
   ["security", "nav_security", "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"],
@@ -36,7 +36,7 @@ const shell = () => {
   scrim.addEventListener("click", close);
   const links = NAV.map(([key, label, d]) => h("a", { href: `#/${key}`, dataset: { key }, onclick: close }, icon(d), t(label)));
   const pending = h("span", { class: "badge-count hidden" }, "0");
-  links.find((a) => a.dataset.key === "approvals").append(pending);
+  links.find((a) => a.dataset.key === "plans").append(pending);
   nav.setPending = (n) => { pending.textContent = String(n); pending.classList.toggle("hidden", !n); };
   const themeBtn = h("button", { class: "small", type: "button", onclick: () => { const cur = document.documentElement.getAttribute("data-theme"); setTheme(cur === "dark" ? "light" : cur === "light" ? "auto" : "dark"); toast("Theme: " + (document.documentElement.getAttribute("data-theme") ?? "auto")); } }, t("theme"));
   const signOut = h("button", { class: "small", type: "button", onclick: async () => { try { await api("POST", "/api/auth/logout"); } catch { /* already signed out */ } state.signedIn = false; state.csrf = null; location.hash = "#/login"; } }, t("signOut"));
@@ -56,7 +56,7 @@ const route = async () => {
   document.title = `${t("nav_" + page) === "nav_" + page ? page : t("nav_" + page)} · Nova Ads Console`;
   const views = {
     overview: () => viewOverview(main, nav), connections: () => viewConnections(main, query), accounts: () => viewAccounts(main), performance: () => viewPerformance(main),
-    approvals: () => viewApprovals(main, arg), activity: () => viewActivity(main), ai: () => viewAi(main), security: () => viewSecurity(main, () => {}),
+    plans: () => viewPlans(main, arg), activity: () => viewActivity(main), ai: () => viewAi(main), security: () => viewSecurity(main, () => {}),
     diagnostics: () => viewDiagnostics(main), hosting: () => viewHosting(main),
   };
   await (views[page] ?? views.overview)();

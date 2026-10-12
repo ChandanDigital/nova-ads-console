@@ -41,7 +41,7 @@ export const viewOverview = (root, nav) => load(root, async () => {
       section(t("ov_checklist"), h("ol", { class: "steps" }, steps.map(([label, done], i) => h("li", { class: done ? "done" : "" }, h("span", { class: "n" }, done ? "✓" : String(i + 1)), h("span", {}, label))))),
       section(t("ov_usage"), usage.map((m) => h("div", {}, h("div", { class: "row spread small" }, h("span", {}, m.metric.replaceAll("_", " ")), h("span", { class: "muted" }, `${fmtInt(m.used)} / ${fmtInt(m.soft_limit)}`)), bar(m.percent_of_soft_limit))), h("a", { href: "#/hosting" }, t("nav_hosting")))),
     h("div", { class: "grid cols-2" },
-      section(t("ov_pending"), o.pending_plans.length ? table([{ label: "Plan", render: (r) => r.id.slice(0, 8) }, { label: t("perf_account"), key: "account_id" }, { label: "", render: (r) => h("button", { class: "small", onclick: () => go("#/approvals/" + r.id) }, t("open")) }], o.pending_plans) : h("p", { class: "muted" }, t("none_pending"))),
+      section(t("ov_pending"), o.pending_plans.length ? table([{ label: "Plan", render: (r) => r.id.slice(0, 8) }, { label: t("perf_account"), key: "account_id" }, { label: "", render: (r) => h("button", { class: "small", onclick: () => go("#/plans/" + r.id) }, t("open")) }], o.pending_plans) : h("p", { class: "muted" }, t("none_pending"))),
       section(t("ov_activity"), table([{ label: "", render: (r) => when(r.ts) }, { label: "", key: "action" }, { label: "", render: (r) => statusChip(r.outcome) }], o.recent_activity))),
     section(t("ov_alerts"),
       h("p", { class: "muted small" }, t("ov_alertsHelp"), alerts.last_check_at ? ` Last check: ${when(alerts.last_check_at)}.` : ""),
@@ -157,12 +157,12 @@ const renderAudit = (a) => h("div", { class: "stack" },
     f.status === "fail" ? h("details", {}, h("summary", {}, "Evidence"), h("pre", { class: "mono small" }, JSON.stringify(f.evidence, null, 2))) : null)),
   callout("info", `Not checked (never scored as passing): ${a.not_checked.join("; ")}. No health score is shown because no validated scoring method is enabled.`));
 
-// ================================================================== approvals
-export const viewApprovals = (root, id) => (id ? viewPlan(root, id) : load(root, async () => {
+// ================================================================== plans
+export const viewPlans = (root, id) => (id ? viewPlan(root, id) : load(root, async () => {
   const plans = await api("GET", "/api/plans");
-  const waiting = plans.filter((p) => p.status === "awaiting_approval");
-  const cols = [{ label: "Plan", render: (p) => h("span", { class: "mono" }, p.id.slice(0, 8)) }, { label: t("perf_account"), render: (p) => p.account_name ?? p.account_id }, { label: "Status", render: (p) => statusChip(p.status) }, { label: "By", key: "created_by" }, { label: "Created", render: (p) => when(p.created_at) }, { label: "Approved", render: (p) => (p.approved ? chip(t("yes"), "ok") : "—") }];
-  return page(t("apr_title"), section(t("apr_queue"), waiting.length ? table(cols, waiting, { onRow: (p) => go("#/approvals/" + p.id) }) : h("p", { class: "muted" }, t("none_pending"))), section(t("apr_all"), table(cols, plans, { onRow: (p) => go("#/approvals/" + p.id), empty: "No plans yet." })));
+  const waiting = plans.filter((p) => ["ready", "awaiting_approval"].includes(p.status));
+  const cols = [{ label: "Plan", render: (p) => h("span", { class: "mono" }, p.id.slice(0, 8)) }, { label: t("perf_account"), render: (p) => p.account_name ?? p.account_id }, { label: "Status", render: (p) => statusChip(p.status) }, { label: "By", key: "created_by" }, { label: "Created", render: (p) => when(p.created_at) }];
+  return page(t("apr_title"), section(t("apr_queue"), waiting.length ? table(cols, waiting, { onRow: (p) => go("#/plans/" + p.id) }) : h("p", { class: "muted" }, t("none_pending"))), section(t("apr_all"), table(cols, plans, { onRow: (p) => go("#/plans/" + p.id), empty: "No plans yet." })));
 }));
 
 const describeOp = (op, currency) => {
@@ -182,14 +182,10 @@ const describeOp = (op, currency) => {
 const viewPlan = (root, id) => load(root, async () => {
   const d = await api("GET", `/api/plans/${id}`);
   const plan = d.plan, cur = plan.account.currency;
-  const perms = plan.required_permissions;
-  const boxes = perms.map((p) => h("input", { type: "checkbox", value: p, checked: true, id: "perm-" + p }));
-  const typed = h("input", { id: "approve-typed", autocomplete: "off", placeholder: "APPROVE" });
-  const secs = h("select", { id: "approve-secs" }, [[900, "15 min"], [3600, "1 hour"], [14400, "4 hours"], [86400, "24 hours"]].map(([v, l]) => h("option", { value: v, selected: v === 3600 }, l)));
   const act = (label, path, cls = "", body, then) => h("button", { class: cls, onclick: guard(async () => { await api("POST", `/api/plans/${id}/${path}`, body); toast("OK"); (then ?? (() => viewPlan(root, id)))(); }) }, label);
-  const canApprove = d.status === "awaiting_approval";
+  const open = ["draft", "validation_failed", "ready", "awaiting_approval"].includes(d.status);
   return page(t("apr_review"),
-    h("div", { class: "row spread" }, h("div", { class: "row" }, statusChip(d.status), h("span", { class: "muted" }, `${plan.account.name} (${plan.account.customer_id}) · ${cur} · ${plan.account.timezone}`)), h("a", { href: "#/approvals" }, "← " + t("nav_approvals"))),
+    h("div", { class: "row spread" }, h("div", { class: "row" }, statusChip(d.status), h("span", { class: "muted" }, `${plan.account.name} (${plan.account.customer_id}) · ${cur} · ${plan.account.timezone}`)), h("a", { href: "#/plans" }, "← " + t("nav_plans"))),
     h("div", { class: "row small" }, h("span", { class: "muted" }, t("apr_hash")), h("code", {}, d.plan_hash), h("button", { class: "small no-print", type: "button", "data-print": "1" }, t("print"))),
     d.validation?.code ? callout("bad", `Validation failed: ${d.validation.message}`, h("pre", { class: "mono small" }, JSON.stringify(d.validation.details, null, 2))) : null,
     h("div", { class: "stack" }, plan.operations.map((op, i) => h("div", { class: "card flat stack" },
@@ -199,16 +195,12 @@ const viewPlan = (root, id) => load(root, async () => {
         : h("ul", {}, describeOp(op, cur).map((b) => h("li", {}, b))),
       h("div", { class: "small" }, h("strong", {}, t("apr_effect") + ": "), op.spending_effect), h("div", { class: "small" }, h("strong", {}, t("apr_recovery") + ": "), op.recovery), h("div", { class: "small muted" }, op.reason),
       h("details", {}, h("summary", {}, "JSON"), h("pre", { class: "mono small" }, JSON.stringify(op, null, 2)))))),
-    d.approval ? callout(d.approval.active ? "ok" : "warn", `Approved ${when(d.approval.approved_at)} · valid until ${when(d.approval.expires_at)} · ${d.approval.permissions.join(", ")}${d.approval.revoked ? " · REVOKED" : ""}`) : null,
-    canApprove ? section(t("apr_approve"),
-      h("div", { class: "checks" }, h("strong", {}, t("apr_permissions")), boxes.map((b, i) => h("label", {}, b, perms[i]))),
-      field(t("apr_expiry"), secs), field(t("apr_type"), typed),
-      callout("warn", t("apr_note")),
-      h("div", { class: "row" }, h("button", { class: "primary", onclick: guard(async () => { await api("POST", `/api/plans/${id}/approve`, { hash: d.plan_hash, permissions: boxes.filter((b) => b.checked).map((b) => b.value), seconds: Number(secs.value), confirmation: typed.value }); toast("Approved"); viewPlan(root, id); }) }, t("apr_approve")), act(t("apr_reject"), "reject", "danger"))) : null,
+    d.plan.required_permissions?.length ? h("div", { class: "row small" }, h("span", { class: "muted" }, "Change types"), d.plan.required_permissions.map((x) => chip(x))) : null,
+    open ? callout("warn", t("plan_note")) : null,
     h("div", { class: "row" },
-      ["draft", "validation_failed", "awaiting_approval"].includes(d.status) ? act(t("apr_validate"), "validate") : null,
-      d.approval?.active ? act(t("apr_revoke"), "revoke-approval") : null,
-      d.status === "awaiting_approval" && d.approval?.active ? act(t("apr_execute"), "execute", "primary") : null,
+      open ? act(t("apr_validate"), "validate") : null,
+      d.ready_to_run ? h("button", { class: "primary", id: "run-plan", onclick: guard(async () => { if (!confirm(t("plan_runConfirm"))) return; await api("POST", `/api/plans/${id}/execute`); toast("Done"); viewPlan(root, id); }) }, t("plan_run")) : null,
+      open ? act(t("plan_cancel"), "cancel", "danger") : null,
       ["outcome_unknown", "partially_succeeded", "running"].includes(d.status) ? act(t("apr_reconcile"), "reconcile") : null));
 });
 

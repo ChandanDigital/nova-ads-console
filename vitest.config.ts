@@ -12,7 +12,7 @@ export default defineConfig({
           GOOGLE_CLIENT_ID: "test-client.apps.googleusercontent.com",
           GOOGLE_CLIENT_SECRET: "test-client-secret",
           ADMIN_SETUP_SECRET: "test-setup-secret-0123456789abcdef0123456789",
-          PUBLIC_ORIGIN: "https://nodi.example.workers.dev",
+          PUBLIC_ORIGIN: "https://nova.example.workers.dev",
         },
       },
     }),

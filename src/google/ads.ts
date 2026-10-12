@@ -2,7 +2,7 @@ import type { Env } from "../env";
 import { adsVersion } from "../env";
 import type { Db } from "../lib/db";
 import { now } from "../lib/db";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { addUsage, enforceQuota } from "../lib/usage";
 import { getAccessToken } from "./oauth";
 
@@ -31,8 +31,8 @@ interface GoogleFailure {
   location?: { fieldPathElements?: { fieldName: string; index?: number }[] };
 }
 
-/** Turns a Google Ads REST error into a NodiError with a stable code. Keeps codes, field paths and request id; drops raw user input. */
-export const mapGoogleError = (status: number, bodyText: string, validateOnly = false): NodiError => {
+/** Turns a Google Ads REST error into a NovaError with a stable code. Keeps codes, field paths and request id; drops raw user input. */
+export const mapGoogleError = (status: number, bodyText: string, validateOnly = false): NovaError => {
   let parsed: any = null;
   try {
     parsed = JSON.parse(bodyText);
@@ -83,7 +83,7 @@ export const mapGoogleError = (status: number, bodyText: string, validateOnly = 
   } else if (status >= 400 && status < 500) {
     http = status === 404 ? 404 : 400;
   }
-  const e = new NodiError(code, message, http, details.length ? details : err?.message ? [{ message: String(err.message).slice(0, 300) }] : undefined, requestId);
+  const e = new NovaError(code, message, http, details.length ? details : err?.message ? [{ message: String(err.message).slice(0, 300) }] : undefined, requestId);
   return e;
 };
 
@@ -118,16 +118,16 @@ export class AdsClient {
         res = await doFetch(token);
       }
     } catch (e) {
-      if (e instanceof NodiError) throw e;
+      if (e instanceof NovaError) throw e;
       if (opts.mutating && !opts.validateOnly) {
-        throw new NodiError("outcome_unknown", "Google did not return a conclusive response. Inspect the account before any retry; nothing was retried automatically.", 504);
+        throw new NovaError("outcome_unknown", "Google did not return a conclusive response. Inspect the account before any retry; nothing was retried automatically.", 504);
       }
-      throw new NodiError(opts.validateOnly ? "validation_unavailable" : "google_unreachable", "Could not reach the Google Ads API (timeout or network error).", 504);
+      throw new NovaError(opts.validateOnly ? "validation_unavailable" : "google_unreachable", "Could not reach the Google Ads API (timeout or network error).", 504);
     }
     const text = await res.text();
     if (!res.ok) {
       if (opts.mutating && !opts.validateOnly && res.status >= 500) {
-        throw new NodiError("outcome_unknown", "Google answered with a server error after the request was sent. Inspect the account before any retry.", 504);
+        throw new NovaError("outcome_unknown", "Google answered with a server error after the request was sent. Inspect the account before any retry.", 504);
       }
       throw mapGoogleError(res.status, text, opts.validateOnly);
     }
@@ -136,7 +136,7 @@ export class AdsClient {
     try {
       return JSON.parse(text) as T;
     } catch {
-      throw new NodiError("google_bad_response", "Google returned a response that was not JSON.", 502);
+      throw new NovaError("google_bad_response", "Google returned a response that was not JSON.", 502);
     }
   }
 

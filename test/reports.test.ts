@@ -148,7 +148,7 @@ describe("maintenance and diagnostics", () => {
     const d = (await call("/api/diagnostics?deep=1", { session: s })).json as any[];
     const ids = d.map((x) => x.id);
     for (const id of ["secret.encryption_key", "secret.google_client", "secret.setup", "origin.https", "google.redirect", "db.schema", "ads.api", "accounts", "errors.recent"]) expect(ids).toContain(id);
-    expect(d.find((x) => x.id === "google.redirect").detail).toBe("https://nodi.example.workers.dev/oauth/google/callback");
+    expect(d.find((x) => x.id === "google.redirect").detail).toBe("https://nova.example.workers.dev/oauth/google/callback");
     expect(d.find((x) => x.id.startsWith("google.connection.")).detail).toMatch(/Live token refresh succeeded/);
     expect(JSON.stringify(d)).not.toContain(env.GOOGLE_CLIENT_SECRET);
   });

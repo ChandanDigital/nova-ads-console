@@ -1,12 +1,12 @@
 import type { Ctx, Principal } from "../lib/context";
 import { now } from "../lib/db";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { getSetting, setSetting } from "../lib/settings";
 import { adsFor, listAccounts, type AccountRow } from "./accounts";
 
 /**
  * Read-only health monitor. It RAISES alerts for a human to look at; it never pauses, enables or changes anything.
- * (Automatic pausing without a human approval would break the approval model, and a Free-plan Worker has only 10 ms of CPU.)
+ * (Automatic pausing is not provided: a Free-plan Worker has only 10 ms of CPU, and a pause should be a decision.)
  * Alerts are deduplicated per account and subject, kept while the condition lasts and resolved automatically afterwards.
  */
 export const DEFAULT_MIN_SPEND_MICROS = 20_000_000n;
@@ -72,12 +72,12 @@ export const runMonitors = async (ctx: Ctx): Promise<{ accounts: number; raised:
       await ctx.db.run("UPDATE alerts SET resolved_at = ? WHERE dedupe_key = ? AND resolved_at IS NULL", started, `${a.customer_id}|monitor_error`);
     } catch (e) {
       errors++;
-      const code = e instanceof NodiError ? e.code : "error";
+      const code = e instanceof NovaError ? e.code : "error";
       await ctx.db.run(
         `INSERT INTO alerts (dedupe_key, account_id, kind, severity, title, detail, first_seen, last_seen, resolved_at) VALUES (?,?,?,?,?,?,?,?,NULL)
          ON CONFLICT(dedupe_key) DO UPDATE SET title = excluded.title, detail = excluded.detail, last_seen = excluded.last_seen, resolved_at = NULL`,
         `${a.customer_id}|monitor_error`, a.customer_id, "monitor_error", "info", `The daily check could not read this account (${code})`,
-        JSON.stringify({ code, message: e instanceof NodiError ? e.message : "Unexpected error", request_id: e instanceof NodiError ? e.requestId ?? null : null }), started, started,
+        JSON.stringify({ code, message: e instanceof NovaError ? e.message : "Unexpected error", request_id: e instanceof NovaError ? e.requestId ?? null : null }), started, started,
       );
     }
   }

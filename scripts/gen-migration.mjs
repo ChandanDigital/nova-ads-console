@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const out = join(tmpdir(), "nodi-schema-" + process.pid + ".mjs");
+const out = join(tmpdir(), "nova-schema-" + process.pid + ".mjs");
 await build({ entryPoints: ["src/lib/schema.ts"], outfile: out, bundle: true, format: "esm", platform: "node", logLevel: "error" });
 const { MIGRATIONS, migrationSql } = await import(pathToFileURL(out).href);
 mkdirSync("migrations", { recursive: true });

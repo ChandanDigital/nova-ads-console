@@ -97,20 +97,22 @@ describe("AI agents cannot reach administrator functions", () => {
   it("an AI token cannot hit recovery, setup, login, token management or settings", async () => {
     const ai = await issueToken(s, ["read", "draft", "apply"]);
     const h = { authorization: "Bearer " + ai };
-    for (const [path, body] of [["/api/auth/recover", { setup_secret: env.ADMIN_SETUP_SECRET, confirmation: "REPLACE CREDENTIAL" }], ["/api/auth/setup", { setup_secret: env.ADMIN_SETUP_SECRET }], ["/api/auth/login", { credential: s.credential }], ["/api/tokens", { label: "x", scopes: ["read"] }], ["/api/settings/global-stop", { stop: false }], ["/api/plans/x/approve", {}]] as const) {
+    for (const [path, body] of [["/api/auth/recover", { setup_secret: env.ADMIN_SETUP_SECRET, confirmation: "REPLACE CREDENTIAL" }], ["/api/auth/setup", { setup_secret: env.ADMIN_SETUP_SECRET }], ["/api/auth/login", { credential: s.credential }], ["/api/tokens", { label: "x", scopes: ["read"] }], ["/api/settings/global-stop", { stop: false }], ["/api/plans/x/execute", {}]] as const) {
       const r = await call(path, { method: "POST", headers: h, body });
       expect([401, 403, 409], path).toContain(r.status);
       expect(r.status, path).not.toBe(200);
       expect(r.status, path).not.toBe(201);
     }
   });
-  it("tool arguments cannot smuggle approval into execution", async () => {
+  it("tool arguments cannot skip validation or add permissions", async () => {
     await connectAndAllow(s, fake);
     const ai = await issueToken(s, ["read", "draft", "apply"]);
     const p = (await mcpTool(ai, "create_campaign_plan", { account_id: CUSTOMER, spec: searchSpec() })).body.data;
     await mcpTool(ai, "validate_change_plan", { plan_id: p.plan_id });
-    const r = await mcpTool(ai, "execute_authorised_plan", { plan_id: p.plan_id, approved: true, approval: { human: "me" }, hash: p.plan_hash });
-    expect(r.body.status).toBe("awaiting_approval");
+    // (this plan was validated above; make it stale so only the arguments could possibly let it through)
+    await env.DB.prepare("UPDATE plans SET validated_at = validated_at - 4000").run();
+    const r = await mcpTool(ai, "execute_authorised_plan", { plan_id: p.plan_id, approved: true, validated: true, force: true, hash: p.plan_hash });
+    expect(r.body.errors[0].code).toBe("validate_first");
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM executions").first<{ n: number }>())!.n).toBe(0);
   });
   it("personal-data GAQL and the manager hierarchy are denied to AI callers", async () => {

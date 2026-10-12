@@ -2,7 +2,7 @@ import type { Env } from "../env";
 import { num } from "../env";
 import type { Db } from "./db";
 import { dayKey } from "./db";
-import { NodiError } from "./errors";
+import { NovaError } from "./errors";
 
 export type Metric = "requests" | "mcp_calls" | "ads_calls" | "d1_rows_read" | "d1_rows_written" | "dashboard_calls";
 
@@ -52,7 +52,7 @@ export const enforceQuota = async (env: Env, db: Db, metric: Metric, extra: Metr
   const used = await usageToday(db);
   for (const m of [metric, ...extra]) {
     if ((used[m] ?? 0) >= limits[m]) {
-      throw new NodiError(
+      throw new NovaError(
         "quota_soft_limit",
         `The daily limit for ${m} (${limits[m]}) is used up. Nothing was switched to a paid service. It resets at 00:00 UTC; you can raise the limit in wrangler.jsonc if your Cloudflare plan allows it.`,
         429,

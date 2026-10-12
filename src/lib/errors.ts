@@ -1,5 +1,5 @@
 /** Error with a stable machine code. `status` is the HTTP status used on dashboard routes. */
-export class NodiError extends Error {
+export class NovaError extends Error {
   constructor(
     public code: string,
     message: string,
@@ -12,6 +12,6 @@ export class NodiError extends Error {
 }
 
 export const toErrorBody = (e: unknown) =>
-  e instanceof NodiError
+  e instanceof NovaError
     ? { code: e.code, message: e.message, details: e.details, request_id: e.requestId }
     : { code: "internal_error", message: "The backend could not complete this request." };

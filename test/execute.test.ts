@@ -35,31 +35,21 @@ const newCampaignPlan = async (token = draft) => {
   expect(r.isError, JSON.stringify(r.body)).toBe(false);
   return r.body.data as { plan_id: string; plan_hash: string; required_permissions: string[] };
 };
-const approve = (id: string, hash: string, perms: string[], extra: Record<string, unknown> = {}) =>
-  call(`/api/plans/${id}/approve`, { method: "POST", session: s, body: { hash, permissions: perms, seconds: 3600, confirmation: "APPROVE", ...extra } });
 
 describe("campaign creation workflow", () => {
-  it("draft -> validate -> human approval -> execute, paused by default", async () => {
+  it("draft -> validate -> execute, paused by default", async () => {
     const p = await newCampaignPlan();
     expect(p.required_permissions).toEqual(["create_campaign"]);
 
-    // Cannot execute before validation or approval.
+    // Cannot execute before validation.
     let r = await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id });
     expect(r.isError).toBe(true);
     expect(r.body.errors[0].code).toBe("validate_first");
 
     r = await mcpTool(draft, "validate_change_plan", { plan_id: p.plan_id });
-    expect(r.body.status).toBe("awaiting_approval");
+    expect(r.body.status).toBe("ready");
     expect(validateMutates(fake).length).toBeGreaterThanOrEqual(1);
     expect(realMutates(fake).length).toBe(0);
-
-    r = await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id });
-    expect(r.isError).toBe(true);
-    expect(r.body.status).toBe("awaiting_approval");
-    expect(r.body.errors[0].message).toMatch(/human must approve/i);
-    expect(realMutates(fake).length).toBe(0);
-
-    expect((await approve(p.plan_id, p.plan_hash, p.required_permissions)).status).toBe(200);
 
     r = await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id });
     expect(r.isError, JSON.stringify(r.body)).toBe(false);
@@ -76,7 +66,6 @@ describe("campaign creation workflow", () => {
   it("a plan can never run twice", async () => {
     const p = await newCampaignPlan();
     await mcpTool(draft, "validate_change_plan", { plan_id: p.plan_id });
-    await approve(p.plan_id, p.plan_hash, p.required_permissions);
     await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id });
     const again = await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id });
     expect(again.body.data.status).toBe("succeeded");
@@ -86,41 +75,44 @@ describe("campaign creation workflow", () => {
   it("concurrent executions dispatch exactly once", async () => {
     const p = await newCampaignPlan();
     await mcpTool(draft, "validate_change_plan", { plan_id: p.plan_id });
-    await approve(p.plan_id, p.plan_hash, p.required_permissions);
     await Promise.all([1, 2, 3].map(() => mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id })));
     expect(realMutates(fake).length).toBe(1);
   });
 });
 
-describe("only a human can approve", () => {
-  it("no MCP tool approves; AI tokens cannot call the approval route", async () => {
+describe("who can run a plan, and when", () => {
+  it("there is no approval tool or route; running needs the apply permission", async () => {
     const list = await (await import("./helpers")).mcpCall(apply, "tools/list");
     const names = list.json.result.tools.map((t: any) => t.name) as string[];
     expect(names.some((n) => /approv/i.test(n))).toBe(false);
     expect(names).toContain("execute_authorised_plan");
     const p = await newCampaignPlan();
     await mcpTool(draft, "validate_change_plan", { plan_id: p.plan_id });
-    const viaToken = await call(`/api/plans/${p.plan_id}/approve`, { method: "POST", headers: { authorization: "Bearer " + apply }, body: { hash: p.plan_hash, permissions: p.required_permissions, confirmation: "APPROVE" } });
-    expect(viaToken.status).toBe(403);
-    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM approvals").first<{ n: number }>())!.n).toBe(0);
+    // the old approval route is gone
+    expect((await call(`/api/plans/${p.plan_id}/approve`, { method: "POST", session: s, body: {} })).status).toBe(404);
+    // a draft-only token cannot run a validated plan; an apply token can
+    const refused = await mcpTool(draft, "execute_authorised_plan", { plan_id: p.plan_id });
+    expect(refused.body.errors[0].code).toBe("forbidden");
+    expect(realMutates(fake).length).toBe(0);
+    expect((await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id })).body.data.status).toBe("succeeded");
   });
 
-  it("approval needs the typed word, the exact hash, every permission class and a fresh validation", async () => {
+  it("a plan runs only after a Google validation of this exact plan in the last 30 minutes", async () => {
     const p = await newCampaignPlan();
-    expect((await approve(p.plan_id, p.plan_hash, p.required_permissions)).json.error.code).toBe("validate_first");
+    expect((await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id })).body.errors[0].code).toBe("validate_first");
     await mcpTool(draft, "validate_change_plan", { plan_id: p.plan_id });
-    expect((await approve(p.plan_id, p.plan_hash, p.required_permissions, { confirmation: "yes" })).json.error.code).toBe("needs_confirmation");
-    expect((await approve(p.plan_id, "0".repeat(64), p.required_permissions)).json.error.code).toBe("changed_plan");
-    expect((await approve(p.plan_id, p.plan_hash, [])).json.error.code).toBe("incomplete_approval");
-    expect((await approve(p.plan_id, p.plan_hash, p.required_permissions, { seconds: 5 })).json.error.code).toBe("invalid_expiry");
     await env.DB.prepare("UPDATE plans SET validated_at = validated_at - 4000").run();
-    expect((await approve(p.plan_id, p.plan_hash, p.required_permissions)).json.error.code).toBe("validate_first");
+    const stale = await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id });
+    expect(stale.body.errors[0].code).toBe("validate_first");
+    expect(stale.body.errors[0].message).toMatch(/30 minutes/);
+    expect(realMutates(fake).length).toBe(0);
+    await mcpTool(draft, "validate_change_plan", { plan_id: p.plan_id });
+    expect((await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id })).body.data.status).toBe("succeeded");
   });
 
-  it("an edited plan row invalidates the approval", async () => {
+  it("an edited plan row is refused", async () => {
     const p = await newCampaignPlan();
     await mcpTool(draft, "validate_change_plan", { plan_id: p.plan_id });
-    await approve(p.plan_id, p.plan_hash, p.required_permissions);
     const row = await env.DB.prepare("SELECT plan_json FROM plans WHERE id = ?").bind(p.plan_id).first<{ plan_json: string }>();
     await env.DB.prepare("UPDATE plans SET plan_json = ? WHERE id = ?").bind(row!.plan_json.replace("25000", "99000").replace("250000000", "990000000"), p.plan_id).run();
     const r = await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id });
@@ -129,26 +121,36 @@ describe("only a human can approve", () => {
     expect(realMutates(fake).length).toBe(0);
   });
 
-  it("expired and revoked approvals do not run", async () => {
+  it("the administrator can run or cancel a plan from the dashboard", async () => {
     const p = await newCampaignPlan();
-    await mcpTool(draft, "validate_change_plan", { plan_id: p.plan_id });
-    await approve(p.plan_id, p.plan_hash, p.required_permissions);
-    await env.DB.prepare("UPDATE approvals SET expires_at = 1").run();
-    expect((await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id })).body.errors[0].code).toBe("approval_expired");
-    await approve(p.plan_id, p.plan_hash, p.required_permissions);
-    await call(`/api/plans/${p.plan_id}/revoke-approval`, { method: "POST", session: s });
-    expect((await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id })).body.status).toBe("awaiting_approval");
-    expect(realMutates(fake).length).toBe(0);
+    const run = async (id: string) => (await call(`/api/plans/${id}/execute`, { method: "POST", session: s })).json;
+    expect((await call(`/api/plans/${p.plan_id}/execute`, { method: "POST", session: s })).json.error.code).toBe("validate_first");
+    expect((await call(`/api/plans/${p.plan_id}/validate`, { method: "POST", session: s })).json.status).toBe("ready");
+    expect((await run(p.plan_id)).status).toBe("succeeded");
+    expect(realMutates(fake).length).toBe(1);
+    const q = await newCampaignPlan();
+    await call(`/api/plans/${q.plan_id}/validate`, { method: "POST", session: s });
+    expect((await call(`/api/plans/${q.plan_id}/cancel`, { method: "POST", session: s })).json.status).toBe("cancelled");
+    expect((await call(`/api/plans/${q.plan_id}/execute`, { method: "POST", session: s })).json.error.code).toBe("validate_first");
+    expect(realMutates(fake).length).toBe(1);
+    // a plan that already ran cannot be cancelled
+    expect((await call(`/api/plans/${p.plan_id}/cancel`, { method: "POST", session: s })).json.error.code).toBe("already_final");
   });
 
   it("global stop blocks execution", async () => {
     const p = await newCampaignPlan();
     await mcpTool(draft, "validate_change_plan", { plan_id: p.plan_id });
-    await approve(p.plan_id, p.plan_hash, p.required_permissions);
     await call("/api/settings/global-stop", { method: "POST", session: s, body: { stop: true } });
     const r = await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id });
     expect(r.body.errors[0].code).toBe("stopped");
     expect(realMutates(fake).length).toBe(0);
+  });
+
+  it("the administrator's daily budget cap still refuses an oversized plan at draft time", async () => {
+    await call("/api/settings/budget-cap", { method: "POST", session: s, body: { daily_budget: "100" } });
+    const r = await mcpTool(draft, "create_campaign_plan", { account_id: CUSTOMER, spec: searchSpec() });
+    expect(r.isError).toBe(true);
+    expect(r.body.errors[0].code).toBe("guardrail_budget_cap");
   });
 });
 
@@ -179,7 +181,7 @@ describe("scopes and account permissions", () => {
 });
 
 describe("changing existing campaigns", () => {
-  it("budget change shows the previous value and percentage, and executes only after approval", async () => {
+  it("budget change shows the previous value and percentage, and executes only after validation", async () => {
     seedExisting();
     const r = await mcpTool(draft, "create_budget_change_plan", { account_id: CUSTOMER, budget_resource: BUDGET, new_daily_budget: "300", reason: "Campaign is budget-limited and profitable" });
     expect(r.isError, JSON.stringify(r.body)).toBe(false);
@@ -190,19 +192,17 @@ describe("changing existing campaigns", () => {
     expect(op.before).toEqual({ amountMicros: "200000000" });
     expect(op.spending_effect).toMatch(/200\.00 to 300\.00 INR \(\+50%\)/);
     await mcpTool(draft, "validate_change_plan", { plan_id });
-    await approve(plan_id, plan_hash, required_permissions);
     const ex = await mcpTool(apply, "execute_authorised_plan", { plan_id });
     expect(ex.body.data.status).toBe("succeeded");
     expect(fake.resources.get(BUDGET)!.amountMicros).toBe("300000000");
   });
 
-  it("pause and enable go through the same gates; enabling needs the launch permission", async () => {
+  it("pause and enable go through the same gates; enabling is flagged as a launch change", async () => {
     seedExisting();
     const r = await mcpTool(draft, "create_status_change_plan", { account_id: CUSTOMER, kind: "campaign", resource_names: [CAMPAIGN], status: "PAUSED", reason: "Pause during review" });
     const { plan_id, plan_hash, required_permissions } = r.body.data;
     expect(required_permissions).toEqual(["optimisation"]);
     await mcpTool(draft, "validate_change_plan", { plan_id });
-    await approve(plan_id, plan_hash, required_permissions);
     expect((await mcpTool(apply, "execute_authorised_plan", { plan_id })).body.data.status).toBe("succeeded");
     expect(fake.resources.get(CAMPAIGN)!.status).toBe("PAUSED");
 
@@ -225,7 +225,6 @@ describe("changing existing campaigns", () => {
     expect(r.isError, JSON.stringify(r.body)).toBe(false);
     const { plan_id, plan_hash, required_permissions } = r.body.data;
     await mcpTool(draft, "validate_change_plan", { plan_id });
-    await approve(plan_id, plan_hash, required_permissions);
     expect((await mcpTool(apply, "execute_authorised_plan", { plan_id })).body.data.status).toBe("succeeded");
     expect(fake.resources.get(ag)!.cpcBidMicros).toBe("6000000");
     expect(fake.resources.get(kw)!.status).toBe("PAUSED");
@@ -236,7 +235,6 @@ describe("changing existing campaigns", () => {
     const r = await mcpTool(draft, "create_budget_change_plan", { account_id: CUSTOMER, budget_resource: BUDGET, new_daily_budget: "300", reason: "Raise" });
     const { plan_id, plan_hash, required_permissions } = r.body.data;
     await mcpTool(draft, "validate_change_plan", { plan_id });
-    await approve(plan_id, plan_hash, required_permissions);
     fake.resources.get(BUDGET)!.amountMicros = "250000000"; // someone edited it in Google Ads
     const ex = await mcpTool(apply, "execute_authorised_plan", { plan_id });
     expect(ex.body.errors[0].code).toBe("stale_plan");
@@ -299,7 +297,6 @@ describe("failure handling", () => {
   const readyPlan = async () => {
     const p = await newCampaignPlan();
     await mcpTool(draft, "validate_change_plan", { plan_id: p.plan_id });
-    await approve(p.plan_id, p.plan_hash, p.required_permissions);
     return p;
   };
   it("a timeout after dispatch is outcome_unknown and is never retried", async () => {
@@ -332,28 +329,27 @@ describe("failure handling", () => {
     expect(byOp.campaign.status).toBe("succeeded");
     expect(r.body.data.status).toBe("outcome_unknown"); // children could not be located, so the plan is not claimed as complete
   });
-  it("Google validation errors are reported with their field path and block approval", async () => {
+  it("Google validation errors are reported with their field path and stop the plan from running", async () => {
     const p = await newCampaignPlan();
     fake.validateFailure = { status: 400, body: { error: { code: 400, message: "bad", details: [{ requestId: "r-9", errors: [{ errorCode: { campaignError: "DUPLICATE_CAMPAIGN_NAME" }, message: "dup", location: { fieldPathElements: [{ fieldName: "mutate_operations", index: 1 }, { fieldName: "campaign_operation" }] } }] }] } } };
     const v = await mcpTool(draft, "validate_change_plan", { plan_id: p.plan_id });
     expect(v.isError).toBe(true);
     expect(v.body.errors[0].details[0].field_path).toBe("mutate_operations[1].campaign_operation");
     expect(v.body.request_id).toBe("r-9");
-    expect((await approve(p.plan_id, p.plan_hash, p.required_permissions)).status).toBe(409);
+    expect((await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id })).body.errors[0].code).toBe("validate_first");
   });
-  it("recovery restores previous values through a new plan that needs its own approval", async () => {
+  it("recovery restores previous values through a new plan that must be validated before it runs", async () => {
     seedExisting();
     const r = await mcpTool(draft, "create_budget_change_plan", { account_id: CUSTOMER, budget_resource: BUDGET, new_daily_budget: "300", reason: "Raise" });
     const { plan_id, plan_hash, required_permissions } = r.body.data;
     await mcpTool(draft, "validate_change_plan", { plan_id });
-    await approve(plan_id, plan_hash, required_permissions);
     await mcpTool(apply, "execute_authorised_plan", { plan_id });
     const rec = await mcpTool(draft, "create_recovery_plan", { plan_id });
     expect(rec.isError, JSON.stringify(rec.body)).toBe(false);
     const prev = await mcpTool(draft, "preview_change_plan", { plan_id: rec.body.data.plan_id });
     expect(prev.body.data.plan.operations[0].payload).toEqual({ amountMicros: "200000000" });
     const exec = await mcpTool(apply, "execute_authorised_plan", { plan_id: rec.body.data.plan_id });
-    expect(exec.body.errors[0].code).toBe("validate_first"); // the recovery plan is not even validated, let alone approved
+    expect(exec.body.errors[0].code).toBe("validate_first"); // the recovery plan has not been validated yet
     expect(fake.resources.get(BUDGET)!.amountMicros).toBe("300000000");
   });
   it("history lists plans with their outcome", async () => {

@@ -1,6 +1,6 @@
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 
-/** Resources AI callers may read. Ported from the original Nodi Ads read allowlist. customer_client is excluded on purpose (see gaqlFor). */
+/** Resources AI callers may read. Ported from the original Python plugin read allowlist. customer_client is excluded on purpose (see gaqlFor). */
 export const READ_RESOURCES = new Set([
   "customer", "campaign", "campaign_budget", "ad_group", "ad_group_ad", "ad_group_criterion", "campaign_criterion", "asset",
   "campaign_asset", "ad_group_asset", "asset_group", "asset_group_asset", "conversion_action", "customer_conversion_goal",
@@ -24,26 +24,26 @@ const PERSONAL = ["email", "phone", "user_identifier", "customer_match", "user_i
 export const boundedGaql = (query: string, maxRows: number, requested?: number): { query: string; limit: number } => {
   const cap = Math.max(1, Math.min(maxRows, requested ?? maxRows));
   if (typeof query !== "string" || query.length > 12_000 || /;|--|\/\*|\*\/|\0/.test(query)) {
-    throw new NodiError("invalid_query", "Invalid GAQL syntax.", 400);
+    throw new NovaError("invalid_query", "Invalid GAQL syntax.", 400);
   }
   const m = /^\s*SELECT\s+([\w.,\s]+?)\s+FROM\s+(\w+)(.*)$/is.exec(query);
   if (!m || !READ_RESOURCES.has(m[2]!.toLowerCase())) {
-    throw new NodiError("invalid_query", "This reporting resource is unavailable. customer_client is available only through account discovery.", 400);
+    throw new NovaError("invalid_query", "This reporting resource is unavailable. customer_client is available only through account discovery.", 400);
   }
   const fields = m[1]!.split(",").map((x) => x.trim().toLowerCase());
   if (fields.length > 60 || fields.some((f) => !/^[a-z_]+\.[a-z_0-9]+(\.[a-z_0-9]+)*$/.test(f))) {
-    throw new NodiError("invalid_query", "Invalid report fields.", 400);
+    throw new NovaError("invalid_query", "Invalid report fields.", 400);
   }
   const joined = fields.join(" ");
   if (PERSONAL.some((p) => joined.includes(p))) {
-    throw new NodiError("privacy_denied", "Personal data and raw change payloads cannot be read through AI tools.", 403);
+    throw new NovaError("privacy_denied", "Personal data and raw change payloads cannot be read through AI tools.", 403);
   }
   const tail = m[3]!;
-  if (/\bPARAMETERS\b/i.test(tail)) throw new NodiError("invalid_query", "GAQL parameters are disabled.", 400);
+  if (/\bPARAMETERS\b/i.test(tail)) throw new NovaError("invalid_query", "GAQL parameters are disabled.", 400);
   const lm = /\bLIMIT\s+(\d+)\s*$/i.exec(tail);
   if (lm) {
     const bound = Number(lm[1]);
-    if (bound < 1 || bound > cap) throw new NodiError("invalid_query", `LIMIT must be between 1 and ${cap}.`, 400);
+    if (bound < 1 || bound > cap) throw new NovaError("invalid_query", `LIMIT must be between 1 and ${cap}.`, 400);
     return { query: query.trim(), limit: bound };
   }
   return { query: `${query.trim()} LIMIT ${cap}`, limit: cap };
@@ -55,25 +55,25 @@ export const gaqlString = (v: string): string => "'" + v.replace(/\\/g, "\\\\").
 export const isIsoDate = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + "T00:00:00Z"));
 
 export const dateWindow = (start: unknown, end: unknown): string => {
-  if (!isIsoDate(start) || !isIsoDate(end)) throw new NodiError("invalid_dates", "Use YYYY-MM-DD dates.", 400);
+  if (!isIsoDate(start) || !isIsoDate(end)) throw new NovaError("invalid_dates", "Use YYYY-MM-DD dates.", 400);
   const a = Date.parse(start + "T00:00:00Z");
   const b = Date.parse(end + "T00:00:00Z");
-  if (b < a || (b - a) / 86_400_000 > 366) throw new NodiError("invalid_dates", "Choose an ordered range of at most 367 days.", 400);
+  if (b < a || (b - a) / 86_400_000 > 366) throw new NovaError("invalid_dates", "Choose an ordered range of at most 367 days.", 400);
   return `segments.date BETWEEN '${start}' AND '${end}'`;
 };
 
 export const customerId = (v: unknown): string => {
   const s = String(v ?? "").replace(/-/g, "");
-  if (!/^\d{10}$/.test(s)) throw new NodiError("invalid_account", "Use a 10-digit Google Ads customer ID.", 400);
+  if (!/^\d{10}$/.test(s)) throw new NovaError("invalid_account", "Use a 10-digit Google Ads customer ID.", 400);
   return s;
 };
 
 /** Decimal string -> integer micros. Floats are rejected so money never passes through binary floating point. */
 export const moneyMicros = (v: unknown): bigint => {
-  if (typeof v === "number" || typeof v === "boolean") throw new NodiError("invalid_money", "Send money as a decimal string such as \"250.00\", not a number.", 400);
+  if (typeof v === "number" || typeof v === "boolean") throw new NovaError("invalid_money", "Send money as a decimal string such as \"250.00\", not a number.", 400);
   const s = String(v ?? "").trim();
   const m = /^(\d{1,12})(?:\.(\d{1,6}))?$/.exec(s);
-  if (!m) throw new NodiError("invalid_money", "Money needs digits with at most six decimal places.", 400);
+  if (!m) throw new NovaError("invalid_money", "Money needs digits with at most six decimal places.", 400);
   return BigInt(m[1]!) * 1_000_000n + BigInt((m[2] ?? "").padEnd(6, "0") || "0");
 };
 

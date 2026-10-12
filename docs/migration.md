@@ -1,6 +1,8 @@
 # Migrating from the local Python plugin (non-destructive)
 
-**The local installation is never modified.** Nothing in `~/.nodi-ads` (database, `local-env.json`, encryption key, credentials, approvals) is deleted, moved or rewritten by any step below. You can keep both side by side; the cloud edition has its own database and its own approvals.
+> Older installs keep their data in `~/.nodi-ads`; the current local plugin keeps using that folder if it already exists, otherwise `~/.nova-ads`. Use whichever folder you have.
+
+**The local installation is never modified.** Nothing in `~/.nova-ads` (database, `local-env.json`, encryption key, credentials, approvals) is deleted, moved or rewritten by any step below. You can keep both side by side; the cloud edition has its own database and its own approvals.
 
 ## What can move, what cannot
 
@@ -14,10 +16,10 @@
 
 ## Steps
 
-1. On the computer that has the local plugin, run the **read-only** exporter with the Python that already runs it (the one in `~/.nodi-ads/venv`):
+1. On the computer that has the local plugin, run the **read-only** exporter with the Python that already runs it (the one in `~/.nova-ads/venv`):
 
    ```
-   %USERPROFILE%\.nodi-ads\venv\Scripts\python tools\export_legacy.py --out nodi-legacy-export.json
+   %USERPROFILE%\.nova-ads\venv\Scripts\python tools\export_legacy.py --out nova-legacy-export.json
    ```
    It opens the SQLite file in `mode=ro` (SQLite itself refuses writes), decrypts only the allowed record kinds (`accounts`, `plans`, `plan_status`, `approvals`, `history`, `standing`), never reads `credentials`, refuses to overwrite an existing output file, and prints what it wrote. Tests prove the database file is byte-identical afterwards and that no token, secret or key appears in the output.
 2. Open the file in a text editor if you wish; it contains account names, permission scopes and plan summaries only.

@@ -36,4 +36,4 @@ Nothing in this project calls a paid API, enables a billing feature, or upgrades
 
 ## If you refuse Cloudflare entirely
 
-See [`github-only.md`](github-only.md): a weekly read-only report in GitHub Actions. It **cannot** provide an always-available MCP server, dashboard, OAuth sign-in, or approvals, because GitHub Actions jobs run briefly on a schedule and GitHub Pages cannot run server code (and is public-only on the free plan).
+See [`github-only.md`](github-only.md): a weekly read-only report in GitHub Actions. It **cannot** provide an always-available MCP server, dashboard, OAuth sign-in, or plan running, because GitHub Actions jobs run briefly on a schedule and GitHub Pages cannot run server code (and is public-only on the free plan).
