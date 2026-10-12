@@ -32,7 +32,7 @@ describe("remote MCP endpoint", () => {
     expect(res.headers.get("www-authenticate")).toBe(`Bearer resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource"`);
   });
   it("rejects garbage, revoked and human-credential bearers", async () => {
-    expect((await mcpCall("nodi_api_" + "a".repeat(43), "tools/list")).status).toBe(401);
+    expect((await mcpCall("nova_api_" + "a".repeat(43), "tools/list")).status).toBe(401);
     expect((await mcpCall(s.credential!, "tools/list")).status).toBe(401);
     const t = await issueToken(s, ["read"]);
     const list = await call("/api/tokens", { session: s });
@@ -110,7 +110,7 @@ describe("official MCP SDK client", () => {
     // 1) The client discovers the server, registers itself and is sent to the browser.
     const first = await auth(provider, { serverUrl, fetchFn: inProcessFetch as any, scope: "read draft" });
     expect(first).toBe("REDIRECT");
-    expect(info?.client_id).toMatch(/^nodi_c_/);
+    expect(info?.client_id).toMatch(/^nova_c_/);
     expect(authUrl!.origin + authUrl!.pathname).toBe(ORIGIN + "/oauth/authorize");
     expect(authUrl!.searchParams.get("code_challenge_method")).toBe("S256");
 
@@ -133,8 +133,8 @@ describe("official MCP SDK client", () => {
     // 3) The client trades the code for tokens.
     const second = await auth(provider, { serverUrl, authorizationCode: back.searchParams.get("code")!, fetchFn: inProcessFetch as any });
     expect(second).toBe("AUTHORIZED");
-    expect(saved!.access_token).toMatch(/^nodi_at_/);
-    expect(saved!.refresh_token).toMatch(/^nodi_rt_/);
+    expect(saved!.access_token).toMatch(/^nova_at_/);
+    expect(saved!.refresh_token).toMatch(/^nova_rt_/);
     expect(saved!.scope).toBe("read"); // the human narrowed it
 
     // 4) The OAuth token works on /mcp with exactly the granted scope and account.
@@ -189,7 +189,7 @@ describe("OAuth server hardening", () => {
   it("authorize refuses unknown clients, unregistered redirects, missing PKCE and a foreign resource", async () => {
     const id = await newClient();
     const { challenge } = await pkce();
-    expect((await startConsent("nodi_c_unknown", challenge)).status).toBe(400);
+    expect((await startConsent("nova_c_unknown", challenge)).status).toBe(400);
     expect((await startConsent(id, challenge, { redirect_uri: "https://evil.example/cb" })).status).toBe(400);
     const noPkce = await startConsent(id, challenge, { code_challenge_method: "plain" });
     expect(noPkce.headers.get("location")).toContain("error=invalid_request");
@@ -232,7 +232,7 @@ describe("OAuth server hardening", () => {
   });
   it("confidential clients must present their secret", async () => {
     const reg = (await register({ client_name: "conf", redirect_uris: ["https://claude.ai/api/mcp/auth_callback"], token_endpoint_auth_method: "client_secret_post" })).json;
-    expect(reg.client_secret).toMatch(/^nodi_cs_/);
+    expect(reg.client_secret).toMatch(/^nova_cs_/);
     const { verifier, challenge } = await pkce();
     const code = await approveAndGetCode(reg.client_id, challenge);
     const base = { grant_type: "authorization_code", code, client_id: reg.client_id, redirect_uri: "https://claude.ai/api/mcp/auth_callback", code_verifier: verifier };
