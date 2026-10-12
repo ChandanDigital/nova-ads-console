@@ -45,7 +45,7 @@ describe("dashboard static files", () => {
   it("does not store secrets in the browser", async () => {
     for (const f of FILES) {
       const js = (await get(f)).text;
-      for (const m of js.matchAll(/(?:localStorage|sessionStorage)\.(?:set|get)Item|safeSet\(\s*["']([^"']+)/g)) expect(m[1] ?? "nodi.theme", f).toMatch(/^nodi\.(theme|lang)$|undefined|^$/);
+      for (const m of js.matchAll(/(?:localStorage|sessionStorage)\.(?:set|get)Item|safeSet\(\s*["']([^"']+)/g)) expect(m[1] ?? "nova.theme", f).toMatch(/^nova\.(theme|lang)$|undefined|^$/);
     }
   });
 });
