@@ -1,7 +1,7 @@
 import type { Ctx } from "../lib/context";
 import { now } from "../lib/db";
 import { audit } from "../lib/audit";
-import { NodiError } from "../lib/errors";
+import { NovaError } from "../lib/errors";
 import { randomToken, sha256Hex, timingSafeEqual } from "../lib/crypto";
 import { parseCookies, sessionCookieName, sessionSetCookie, uaHash } from "../lib/http";
 
@@ -30,7 +30,7 @@ export const rateLimit = async (ctx: Ctx, key: string, max: number, windowSec: n
     return;
   }
   if (row.count >= max) {
-    throw new NodiError("rate_limited", `Too many attempts. Try again in ${Math.max(1, windowSec - (t - row.window_start))} seconds.`, 429);
+    throw new NovaError("rate_limited", `Too many attempts. Try again in ${Math.max(1, windowSec - (t - row.window_start))} seconds.`, 429);
   }
   await ctx.db.run("UPDATE rate_limits SET count = count + 1 WHERE key = ?", key);
 };
@@ -87,28 +87,28 @@ export const readSession = async (ctx: Ctx): Promise<AdminSession | null> => {
 export const requireAdmin = async (ctx: Ctx): Promise<AdminSession> => {
   // An MCP/OAuth bearer token is never accepted on dashboard routes.
   if (ctx.request.headers.get("authorization")) {
-    throw new NodiError("forbidden", "Dashboard routes accept a signed-in browser session only.", 403);
+    throw new NovaError("forbidden", "Dashboard routes accept a signed-in browser session only.", 403);
   }
   const s = await readSession(ctx);
-  if (!s) throw new NodiError("unauthenticated", "Sign in first.", 401);
+  if (!s) throw new NovaError("unauthenticated", "Sign in first.", 401);
   const method = ctx.request.method;
   if (method !== "GET" && method !== "HEAD") {
     assertSameOrigin(ctx);
     const header = ctx.request.headers.get("x-csrf-token") ?? "";
-    if (!(await timingSafeEqual(header, s.csrf))) throw new NodiError("csrf_failed", "Missing or wrong CSRF token. Reload the page.", 403);
+    if (!(await timingSafeEqual(header, s.csrf))) throw new NovaError("csrf_failed", "Missing or wrong CSRF token. Reload the page.", 403);
   }
   return s;
 };
 
 export const assertSameOrigin = (ctx: Ctx): void => {
   const origin = ctx.request.headers.get("origin");
-  if (origin !== ctx.origin) throw new NodiError("origin_denied", "Request origin does not match this dashboard.", 403);
+  if (origin !== ctx.origin) throw new NovaError("origin_denied", "Request origin does not match this dashboard.", 403);
 };
 
 // ------------------------------------------------------------------ setup / login / recovery
 const requireSetupSecretConfigured = (secret: string | undefined): string => {
   if (!secret || secret.length < 24) {
-    throw new NodiError(
+    throw new NovaError(
       "setup_secret_missing",
       "ADMIN_SETUP_SECRET is not set (or shorter than 24 characters). Add it in Cloudflare: Workers > nova-ads-console > Settings > Variables and Secrets.",
       503,
@@ -123,18 +123,18 @@ const requireSetupSecretConfigured = (secret: string | undefined): string => {
  * The secret never exists in D1 and no MCP tool or OAuth scope reaches this code path.
  */
 const verifySetupSecret = async (ctx: Ctx, provided: unknown): Promise<string> => {
-  if (ctx.request.headers.get("authorization")) throw new NodiError("forbidden", "Recovery is not available to token holders.", 403);
+  if (ctx.request.headers.get("authorization")) throw new NovaError("forbidden", "Recovery is not available to token holders.", 403);
   await rateLimit(ctx, "setup:ip:" + ctx.ipHash, 5, 900);
   await rateLimit(ctx, "setup:global", 20, 900);
   const configured = requireSetupSecretConfigured(ctx.env.ADMIN_SETUP_SECRET).trim(); const typed = typeof provided === "string" ? provided.trim() : "";
   if (!(await timingSafeEqual(typed, configured))) {
     await audit(ctx.db, { actor_type: "anonymous", action: "setup_secret_rejected", outcome: "denied", ip_hash: ctx.ipHash });
     // Length hint only (never the value) so a mistyped or stale Cloudflare secret can be diagnosed without exposing it.
-    throw new NodiError("invalid_setup_secret", `That setup secret is not correct (the secret saved in Cloudflare is ${configured.length === typed.length ? "the same length as" : configured.length > typed.length ? "longer than" : "shorter than"} what you typed).`, 403);
+    throw new NovaError("invalid_setup_secret", `That setup secret is not correct (the secret saved in Cloudflare is ${configured.length === typed.length ? "the same length as" : configured.length > typed.length ? "longer than" : "shorter than"} what you typed).`, 403);
   }
   const digest = await sha256Hex("setup-secret:" + configured);
   if (await ctx.db.first("SELECT digest FROM used_setup_secrets WHERE digest = ?", digest)) {
-    throw new NodiError(
+    throw new NovaError(
       "setup_secret_used",
       "This setup secret was already used. For safety each value works once: change ADMIN_SETUP_SECRET to a new random value in Cloudflare (Settings > Variables and Secrets), wait for it to apply, then try again.",
       409,
@@ -173,7 +173,7 @@ const replaceAdminCredential = async (
 };
 
 export const setupFirstAdmin = async (ctx: Ctx, body: { setup_secret?: unknown }): Promise<IssueResult> => {
-  if (await adminExists(ctx)) throw new NodiError("already_set_up", "An administrator already exists. Use sign-in, or the recovery option if the credential is lost.", 409);
+  if (await adminExists(ctx)) throw new NovaError("already_set_up", "An administrator already exists. Use sign-in, or the recovery option if the credential is lost.", 409);
   const digest = await verifySetupSecret(ctx, body.setup_secret);
   const r = await replaceAdminCredential(ctx, digest, "setup", false);
   await audit(ctx.db, { actor_type: "admin", actor_id: ADMIN_ID, action: "admin_setup", outcome: "ok", ip_hash: ctx.ipHash });
@@ -182,7 +182,7 @@ export const setupFirstAdmin = async (ctx: Ctx, body: { setup_secret?: unknown }
 
 /** Administrator-controlled replacement of a lost credential. Old hash is overwritten, never reversed. */
 export const recoverAdmin = async (ctx: Ctx, body: { setup_secret?: unknown; revoke_ai_tokens?: unknown; confirmation?: unknown }): Promise<IssueResult> => {
-  if (body.confirmation !== "REPLACE CREDENTIAL") throw new NodiError("needs_confirmation", "Type REPLACE CREDENTIAL to confirm.", 400);
+  if (body.confirmation !== "REPLACE CREDENTIAL") throw new NovaError("needs_confirmation", "Type REPLACE CREDENTIAL to confirm.", 400);
   const digest = await verifySetupSecret(ctx, body.setup_secret);
   const revoke = body.revoke_ai_tokens !== false;
   const r = await replaceAdminCredential(ctx, digest, "recovery", revoke);
@@ -191,20 +191,20 @@ export const recoverAdmin = async (ctx: Ctx, body: { setup_secret?: unknown; rev
 };
 
 export const login = async (ctx: Ctx, body: { credential?: unknown }): Promise<{ cookie: string; csrf: string }> => {
-  if (ctx.request.headers.get("authorization")) throw new NodiError("forbidden", "Sign in from the browser; bearer tokens cannot sign in.", 403);
+  if (ctx.request.headers.get("authorization")) throw new NovaError("forbidden", "Sign in from the browser; bearer tokens cannot sign in.", 403);
   await rateLimit(ctx, "login:ip:" + ctx.ipHash, 8, 900);
   await rateLimit(ctx, "login:global", 60, 900);
   const credential = typeof body.credential === "string" ? body.credential.trim() : "";
   // AI/OAuth tokens must never sign into the human dashboard.
   if (!credential.startsWith(CREDENTIAL_PREFIX)) {
     await audit(ctx.db, { actor_type: "anonymous", action: "login", outcome: "denied", ip_hash: ctx.ipHash });
-    throw new NodiError("invalid_credential", "That credential is not correct.", 401);
+    throw new NovaError("invalid_credential", "That credential is not correct.", 401);
   }
   const hash = await hashCredential(credential);
   const row = await ctx.db.first<{ id: string }>("SELECT id FROM admin WHERE credential_hash = ? AND status = 'active'", hash);
   if (!row) {
     await audit(ctx.db, { actor_type: "anonymous", action: "login", outcome: "denied", ip_hash: ctx.ipHash });
-    throw new NodiError("invalid_credential", "That credential is not correct.", 401);
+    throw new NovaError("invalid_credential", "That credential is not correct.", 401);
   }
   const session = await createSession(ctx, row.id);
   await ctx.db.run("UPDATE admin SET last_login_at = ? WHERE id = ?", now(), row.id);
@@ -222,7 +222,7 @@ export const rotateCredential = async (ctx: Ctx, s: AdminSession, body: { creden
   await rateLimit(ctx, "rotate:ip:" + ctx.ipHash, 5, 900);
   const credential = typeof body.credential === "string" ? body.credential.trim() : "";
   const row = await ctx.db.first<{ id: string }>("SELECT id FROM admin WHERE id = ? AND credential_hash = ?", s.adminId, await hashCredential(credential));
-  if (!row) throw new NodiError("invalid_credential", "The current credential is not correct.", 401);
+  if (!row) throw new NovaError("invalid_credential", "The current credential is not correct.", 401);
   const r = await replaceAdminCredential(ctx, null, "rotation", false);
   await audit(ctx.db, { actor_type: "admin", actor_id: s.adminId, action: "admin_credential_rotated", outcome: "ok", ip_hash: ctx.ipHash });
   return r;
