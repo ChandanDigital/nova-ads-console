@@ -329,7 +329,7 @@ export const searchCampaignOperations = (spec: SearchSpec, account: PlanAccount,
 
   const amount = moneyMicros(spec.daily_budget);
   if (amount <= 0n) throw new NodiError("invalid_budget", "Daily budget must be positive.", 400);
-  const name = `${spec.name} [Nodi ${planTag}]`;
+  const name = `${spec.name} [Nova ${planTag}]`;
   add("budget", "campaign_budget", { resourceName: budgetRn, name: `${name} budget`, amountMicros: amount.toString(), deliveryMethod: "STANDARD", explicitlyShared: false });
 
   const cp: Record<string, any> = {
