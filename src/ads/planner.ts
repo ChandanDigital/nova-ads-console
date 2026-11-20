@@ -8,7 +8,7 @@ import {
   KINDS, PlanOperationSchema, SearchSpecSchema, type SearchSpec, camelKeys, camelPath, newPlan, planHash, searchCampaignOperations, rsaValidate, resourceValid,
   type Plan, type PlanAccount, type PlanOperation,
 } from "./plans";
-import { AssetCampaignSpecSchema, assetCampaignOperations, splitCampaignType, type AssetCampaignSpec } from "./asset-campaigns";
+import { AssetCampaignSpecSchema, assetCampaignOperations, pmaxRepeatedTexts, splitCampaignType, textAssetOperations, type AssetCampaignSpec } from "./asset-campaigns";
 import { camelToSnake, gaqlString, moneyMicros, pathGet, snakeToCamel } from "../google/gaql";
 import { rowsToObject } from "./util";
 
@@ -105,10 +105,42 @@ export const createCampaignPlan = async (ctx: Ctx, p: Principal, id: string, spe
     throw new NovaError("invalid_input", "Check the campaign fields.", 400, parsed.error.issues.slice(0, 20).map((i) => ({ field: i.path.join("."), problem: i.message })));
   }
   const planId = crypto.randomUUID();
-  const ops = isAsset ? assetCampaignOperations(parsed.data as AssetCampaignSpec, planAccount(account), planId.slice(0, 8)) : searchCampaignOperations(parsed.data as SearchSpec, planAccount(account), planId.slice(0, 8));
-  const plan = newPlan(`${p.kind}:${p.label}`, planAccount(account), ops, parsed.data.business_context);
+  const acct = planAccount(account);
+  let existingText = new Map<string, string>();
+  if (isAsset && (parsed.data as AssetCampaignSpec).campaign_type === "PERFORMANCE_MAX") {
+    const spec = parsed.data as AssetCampaignSpec;
+    const texts = pmaxRepeatedTexts(spec);
+    // Dry run with placeholder assets: every other rule is checked before anything is drafted.
+    assetCampaignOperations(spec, acct, planId.slice(0, 8), new Map(texts.map((t, i) => [t, `customers/${acct.customer_id}/assets/${i + 1}`])));
+    existingText = await findTextAssets(ctx, account, texts);
+    const missing = texts.filter((t) => !existingText.has(t));
+    if (missing.length) {
+      const pre = newPlan(`${p.kind}:${p.label}`, acct, textAssetOperations(missing, acct), { ...spec.business_context, step: "pmax_text_assets_1_of_2" });
+      return {
+        ...(await savePlan(ctx, p, pre, account)),
+        step: "1_of_2_text_assets",
+        missing_text_assets: missing.length,
+        next_action: "Google counts Performance Max headlines and descriptions only when they already exist. Validate and run this text-asset plan (no spend), then call create_campaign_plan again with the same spec to draft the campaign.",
+      };
+    }
+  }
+  const ops = isAsset ? assetCampaignOperations(parsed.data as AssetCampaignSpec, acct, planId.slice(0, 8), existingText) : searchCampaignOperations(parsed.data as SearchSpec, acct, planId.slice(0, 8));
+  const plan = newPlan(`${p.kind}:${p.label}`, acct, ops, parsed.data.business_context);
   plan.id = planId; // the visible tag in the campaign name uses this ID
   return savePlan(ctx, p, plan, account);
+};
+
+/** Existing TEXT assets by exact text (GAQL = and IN are case-sensitive). First match wins; Google usually keeps one asset per text. */
+const findTextAssets = async (ctx: Ctx, account: AccountRow, texts: string[]): Promise<Map<string, string>> => {
+  const out = new Map<string, string>();
+  if (!texts.length) return out;
+  const q = `SELECT asset.resource_name, asset.text_asset.text FROM asset WHERE asset.type = 'TEXT' AND asset.text_asset.text IN (${texts.map(gaqlString).join(", ")}) LIMIT 200`;
+  const r = await adsFor(ctx, account).search(account.customer_id, q, 200);
+  for (const row of r.rows) {
+    const text = row.asset?.textAsset?.text, rn = row.asset?.resourceName;
+    if (typeof text === "string" && typeof rn === "string" && !out.has(text)) out.set(text, rn);
+  }
+  return out;
 };
 
 // --------------------------------------------------------------------------- optimisation changes

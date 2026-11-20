@@ -6,7 +6,7 @@ import { isGlobalStop } from "../lib/settings";
 import { adsFor, getAccountRow, resolveAccount, type AccountRow } from "./accounts";
 import { KINDS, newPlan, planHash, setPath, validatePlanShape, PlanOperationSchema, type Plan, type PlanOperation } from "./plans";
 import { attachBefore, compile, fetchCurrent, normalize, planAccount, savePlan } from "./planner";
-import { camelToSnake, gaqlString, pathGet, snakeToCamel } from "../google/gaql";
+import { camelToSnake, gaqlContains, gaqlString, pathGet, snakeToCamel } from "../google/gaql";
 import { isRecommendationPlan, runRecommendations, validateRecommendations, verifyRecommendations } from "./recommendations";
 
 interface PlanRow {
@@ -257,7 +257,7 @@ export const reconcilePlan = async (ctx: Ctx, p: Principal, id: string) => {
     const tag = plan.id.slice(0, 8);
     const ads = adsFor(ctx, account);
     for (const kind of ["campaign", "campaign_budget"]) {
-      const r = await ads.search(account.customer_id, `SELECT ${kind}.resource_name, ${kind}.name FROM ${kind} WHERE ${kind}.name LIKE ${gaqlString(`%[Nova ${tag}]%`)} LIMIT 5`, 5);
+      const r = await ads.search(account.customer_id, `SELECT ${kind}.resource_name, ${kind}.name FROM ${kind} WHERE ${kind}.name LIKE ${gaqlContains(`[Nova ${tag}]`)} LIMIT 5`, 5);
       const idx = plan.operations.findIndex((o) => o.kind === kind && o.action === "create");
       if (idx >= 0 && r.rows.length === 1) resources[idx] = r.rows[0]![snakeToCamel(kind)]?.resourceName ?? null;
     }

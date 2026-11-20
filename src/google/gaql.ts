@@ -52,6 +52,9 @@ export const boundedGaql = (query: string, maxRows: number, requested?: number):
 /** Escapes a value for use inside a single-quoted GAQL string literal. */
 export const gaqlString = (v: string): string => "'" + v.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
 
+/** A LIKE pattern "contains <literal>". GAQL treats [ ] % _ as wildcards; a literal one is wrapped in brackets, e.g. "[[]". */
+export const gaqlContains = (literal: string): string => gaqlString("%" + literal.replace(/[[\]%_]/g, "[$&]") + "%");
+
 export const isIsoDate = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + "T00:00:00Z"));
 
 export const dateWindow = (start: unknown, end: unknown): string => {

@@ -50,6 +50,9 @@ export const createRecommendationPlan = async (ctx: Ctx, p: Principal, accountId
   const names = [...new Set(parsed.data.recommendations.map((r) => (r.startsWith("customers/") ? r : `customers/${account.customer_id}/recommendations/${r}`)))];
   for (const n of names) resourceValid(n, account.customer_id, "recommendation");
   const found = await readRecommendations(ctx, account, names);
+  // Google refuses mixed types in one all-or-nothing call (RecommendationError.DIFFERENT_TYPES_NOT_SUPPORTED).
+  const types = [...new Set(names.map((n) => found.get(n)?.type).filter(Boolean))];
+  if (types.length > 1) throw new NovaError("mixed_recommendation_types", `Google applies or dismisses one recommendation type per request. These are ${types.join(", ")}: draft one plan per type.`, 422);
   const ops = names.map((name, i) => {
     const info = found.get(name);
     if (!info) throw new NovaError("recommendation_not_found", `Recommendation ${name} was not found in this account (it may already have been applied or may have expired).`, 404);
