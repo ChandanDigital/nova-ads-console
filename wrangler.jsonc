@@ -27,7 +27,10 @@
   "observability": { "enabled": true },
 
   // Non-secret defaults. Secrets (GOOGLE_CLIENT_SECRET, TOKEN_ENCRYPTION_KEY, ...) are NOT here:
-  // set them in the Cloudflare dashboard under Settings > Variables and Secrets.
+  // set them in the Cloudflare dashboard under Settings > Variables and Secrets, as type "Secret".
+  // keep_vars: a deploy must not delete values added in the dashboard as plain text (this wiped
+  // GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET on 2026-11-20).
+  "keep_vars": true,
   "vars": {
     "GOOGLE_ADS_API_VERSION": "v25",
     "MCP_CALLS_PER_DAY": "3000",
