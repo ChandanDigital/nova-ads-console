@@ -42,6 +42,8 @@ export class FakeGoogle {
   recommendNoEffect = false;
   recommendFailure: null | { status: number; body: unknown } = null;
   nextId = 5000;
+  /** public web pages (url -> HTML) served for landing and tracking checks */
+  pages: Record<string, string> = {};
   private original: typeof fetch | undefined;
 
   install() {
@@ -50,7 +52,7 @@ export class FakeGoogle {
   }
   restore() { vi.unstubAllGlobals(); }
   reset() {
-    this.calls = []; this.mutateSchemaErrors = []; this.mutateFailure = null; this.validateFailure = null; this.searchFailure = null; this.recommendNoEffect = false; this.recommendFailure = null; this.resources.clear(); this.cannedRows = {}; this.refreshOk = true; this.customers = defaultCustomers();
+    this.calls = []; this.mutateSchemaErrors = []; this.mutateFailure = null; this.validateFailure = null; this.searchFailure = null; this.recommendNoEffect = false; this.recommendFailure = null; this.resources.clear(); this.cannedRows = {}; this.pages = {}; this.refreshOk = true; this.customers = defaultCustomers();
   }
 
   seed(rn: string, obj: Record<string, any>) { this.resources.set(rn, { resourceName: rn, ...obj }); }
@@ -71,6 +73,7 @@ export class FakeGoogle {
 
     if (url === "https://oauth2.googleapis.com/token") return this.token(body);
     if (url === "https://oauth2.googleapis.com/revoke") return this.json({});
+    if (this.pages[url] !== undefined) return new Response(this.pages[url], { status: 200, headers: { "content-type": "text/html; charset=utf-8" } });
     if (!url.startsWith("https://googleads.googleapis.com/v25/")) return this.json({ error: "unexpected host " + url }, 599);
     if (!(headers.authorization ?? "").startsWith("Bearer ya29.")) return this.json({ error: { code: 401, status: "UNAUTHENTICATED", message: "bad token" } }, 401);
 
@@ -120,7 +123,7 @@ export class FakeGoogle {
     const fields = (/^\s*SELECT\s+(.+?)\s+FROM\s/is.exec(q)?.[1] ?? "").split(",").map((s) => s.trim());
     if (from === "customer") {
       const c = this.customers[cid]; if (!c) return this.json({ error: { code: 403, message: "x", details: [{ errors: [{ errorCode: { authorizationError: "USER_PERMISSION_DENIED" }, message: "no access" }] }] } }, 403);
-      return this.json({ results: [{ customer: { id: c.id, descriptiveName: c.descriptiveName, currencyCode: c.currencyCode, timeZone: c.timeZone, manager: c.manager || undefined, status: c.status } }] });
+      return this.json({ results: [{ customer: { id: c.id, descriptiveName: c.descriptiveName, currencyCode: c.currencyCode, timeZone: c.timeZone, manager: c.manager || undefined, status: c.status, conversionTrackingSetting: c.conversionTrackingSetting } }] });
     }
     if (from === "customer_client") {
       if (headers["login-customer-id"] !== cid) return this.json({ error: { code: 403, message: "login-customer-id required" } }, 403);
@@ -144,7 +147,13 @@ export class FakeGoogle {
       const rows = [...this.resources.values()].filter((r) => r.campaignBudget === eq[3]).map((r) => ({ campaign: { id: r.resourceName.split("/").pop(), name: r.name, campaignBudget: r.campaignBudget } }));
       return this.json({ results: rows });
     }
-    const like = /name LIKE '%\[Nova ([0-9a-f]{8})\]%'/.exec(q);
+    // Like Google: only the bracket-escaped literal matches. An unescaped "[Nova x]" is a character class and finds nothing.
+    const like = /name LIKE '%\[\[\]Nova ([0-9a-f]{8})\[\]\]%'/.exec(q);
+    const textIn = from === "asset" ? /asset\.text_asset\.text\s+IN\s*\(([^)]*)\)/i.exec(q) : null;
+    if (textIn) {
+      const texts = new Set([...textIn[1]!.matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((x) => x[1]!));
+      return this.json({ results: [...this.resources.values()].filter((r) => r.textAsset && texts.has(r.textAsset.text)).map((r) => ({ asset: { resourceName: r.resourceName, textAsset: { text: r.textAsset.text } } })) });
+    }
     if (like) {
       const results = [...this.resources.values()].filter((r) => r.resourceName.includes(`/${from === "campaign" ? "campaigns" : "campaignBudgets"}/`) && String(r.name ?? "").includes(`[Nova ${like[1]}]`)).map((r) => ({ [this.camel(from)]: { resourceName: r.resourceName, name: r.name } }));
       return this.json({ results });
@@ -157,6 +166,9 @@ export class FakeGoogle {
     const ops: { resourceName: string }[] = body.operations ?? [];
     if (body.partialFailure !== false) return this.json({ error: { code: 400, message: "Nova Ads must send partialFailure=false" } }, 400);
     for (const o of ops) if (!this.resources.has(o.resourceName)) return this.json({ error: { code: 404, message: "no such recommendation " + o.resourceName } }, 404);
+    if (new Set(ops.map((o) => this.resources.get(o.resourceName)!.type)).size > 1) {
+      return this.json({ error: { code: 400, details: [{ errors: [{ errorCode: { recommendationError: "DIFFERENT_TYPES_NOT_SUPPORTED" }, message: "Operations with multiple recommendation types are not supported when partial failure mode is not enabled" }] }] } }, 400);
+    }
     if (!this.recommendNoEffect) {
       for (const o of ops) {
         if (action === "apply") this.resources.delete(o.resourceName);
@@ -169,6 +181,13 @@ export class FakeGoogle {
   private mutate(cid: string, body: any): Response {
     const ops: Record<string, any>[] = body.mutateOperations ?? [];
     for (const op of ops) this.mutateSchemaErrors.push(...validateMutateOperation(op));
+    // Google rule seen live (Nov 2026): PMax headline/description assets created in the same request as the asset group do not count.
+    const sameRequest = new Set(ops.map((o) => o.assetOperation?.create?.resourceName).filter(Boolean));
+    const newGroup = ops.some((o) => o.assetGroupOperation?.create);
+    const repeated = ops.filter((o) => ["HEADLINE", "DESCRIPTION"].includes(o.assetGroupAssetOperation?.create?.fieldType) && sameRequest.has(o.assetGroupAssetOperation.create.asset));
+    if (newGroup && repeated.length) {
+      return this.json({ error: { code: 400, status: "INVALID_ARGUMENT", details: [{ errors: [{ errorCode: { assetGroupError: "NOT_ENOUGH_HEADLINE_ASSET" }, message: "Headline asset for a valid asset group is not enough." }] }] } }, 400);
+    }
     if (body.validateOnly) {
       if (this.validateFailure) return this.json(this.validateFailure.body, this.validateFailure.status);
       return this.json({});

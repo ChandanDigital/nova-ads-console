@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { boundedGaql, customerId, dateWindow, gaqlString, moneyMicros } from "../src/google/gaql";
+import { boundedGaql, customerId, dateWindow, gaqlContains, gaqlString, moneyMicros } from "../src/google/gaql";
 import { pacingMath } from "../src/ads/reports";
 import { rsaValidate, SearchSpecSchema, searchCampaignOperations, newPlan, planHash, validatePlanShape, PlanOperationSchema, type Plan } from "../src/ads/plans";
 import { mapGoogleError } from "../src/google/ads";
@@ -32,6 +32,7 @@ describe("GAQL validation", () => {
     expect(() => boundedGaql("SELECT customer_client.id, customer_client.descriptive_name FROM customer_client", 500)).toThrow(/customer_client|unavailable/);
   });
   it("escapes string literals", () => expect(gaqlString("a'b\\c")).toBe("'a\\'b\\\\c'"));
+  it("escapes LIKE wildcards so a plan tag matches literally", () => expect(gaqlContains("[Nova ab_1%]")).toBe("'%[[]Nova ab[_]1[%][]]%'"));
   it("date windows are ordered and bounded", () => {
     expect(dateWindow("2026-01-01", "2026-01-31")).toBe("segments.date BETWEEN '2026-01-01' AND '2026-01-31'");
     expect(() => dateWindow("2026-02-01", "2026-01-01")).toThrow();

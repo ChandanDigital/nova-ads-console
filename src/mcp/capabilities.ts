@@ -35,6 +35,7 @@ export const capabilityList = (): Capability[] => {
     c("ga4_gtm_merchant_reads", "not_ported", "Local Python backend only"),
     c("alerts", "implemented", "A daily read-only check raises alerts (spend with no conversions, disapproved ads, unreadable accounts); get_alerts and the dashboard show them", "Alerts only. Nothing is paused or changed automatically."),
     c("monitors_and_auto_pause", "not_available_on_free_hosting", "Automatic pausing is intentionally not implemented", "A Free-plan Worker has 10 ms of CPU per run, and an automatic pause should be a decision, not a side effect. Use alerts and status-change plans."),
+    c("website_tracking_audit", "partial", "tracking_audit_website: page-source scan for GTM, GA4, Google Ads tags, duplicates and Consent Mode v2, compared with the account's conversion setup", "Page source only (first 100 KB, no JavaScript): tags injected by GTM or plugins and actual firing are not verified. GTM and GA4 API tools are not implemented yet; they need extra Google OAuth scopes."),
     c("landing_page_inspection", "partial", "inspect_landing_page: one public https fetch, simple pattern checks", "No JavaScript rendering, speed test, tracking-tag or policy check; reads at most 100 KB."),
     c("pdf_reports", "partial", "Dashboard Print / Save as PDF button on plans and reports (browser print)", "No server-generated PDF files."),
     c("removal_of_resources", "not_ported", "Disabled by design in the original and here: removal cannot be undone"),

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { AssetCampaignSpecSchema, assetCampaignOperations } from "../src/ads/asset-campaigns";
+import { AssetCampaignSpecSchema, assetCampaignOperations, pmaxRepeatedTexts } from "../src/ads/asset-campaigns";
 import { newPlan } from "../src/ads/plans";
 import { compile } from "../src/ads/planner";
 import { validateMutateOperation } from "./schema-validate";
@@ -21,7 +21,8 @@ const SPECS: Record<string, Record<string, unknown>> = {
 };
 const build = (type: string, over: Record<string, unknown> = {}) => {
   const spec = AssetCampaignSpecSchema.parse({ ...SPECS[type], ...over });
-  return newPlan("t", account, assetCampaignOperations(spec, account, "abcd1234"), {});
+  const existing = new Map(pmaxRepeatedTexts(spec).map((t, i) => [t, A(900 + i)])); // PMax links text assets that already exist
+  return newPlan("t", account, assetCampaignOperations(spec, account, "abcd1234", existing), {});
 };
 
 describe("every supported campaign type conforms to Google's v25 schema", () => {
@@ -43,7 +44,8 @@ describe("every supported campaign type conforms to Google's v25 schema", () => 
     const ops = build("PERFORMANCE_MAX").operations;
     const kinds = ops.map((o) => o.kind);
     expect(kinds).toContain("asset_group");
-    expect(kinds.filter((k) => k === "asset").length).toBe(3 + 2 + 1 + 1); // headlines, descriptions, long headline, business name
+    expect(kinds.filter((k) => k === "asset").length).toBe(1 + 1); // long headline, business name; headlines and descriptions already exist
+    expect(ops.filter((o) => o.kind === "asset_group_asset" && ["HEADLINE", "DESCRIPTION"].includes(o.payload.fieldType)).every((o) => !/\/-\d+$/.test(o.payload.asset))).toBe(true);
     const fields = ops.filter((o) => o.kind === "asset_group_asset").map((o) => o.payload.fieldType).sort();
     expect(fields).toEqual(["DESCRIPTION", "DESCRIPTION", "HEADLINE", "HEADLINE", "HEADLINE", "LONG_HEADLINE", "MARKETING_IMAGE", "SQUARE_MARKETING_IMAGE", "YOUTUBE_VIDEO"]);
     expect(ops.find((o) => o.kind === "campaign_asset" && o.payload.fieldType === "LOGO")).toBeTruthy();
@@ -54,6 +56,7 @@ describe("missing or invalid inputs are refused before anything reaches Google",
   it.each([
     ["PERFORMANCE_MAX", { marketing_images: [] }, /needs 3 headlines/],
     ["PERFORMANCE_MAX", { headlines: ["a", "b"] }, /needs 3 headlines/],
+    ["PERFORMANCE_MAX", { descriptions: ["d".repeat(61), "e".repeat(70)] }, /60 text units/],
     ["DISPLAY", { long_headline: undefined }, /long headline/],
     ["DISPLAY", { logos: [] }, /logo/],
     ["DEMAND_GEN", { final_url: undefined }, /final URL/],
@@ -91,7 +94,32 @@ describe("through the MCP tool, validation and execution", () => {
 
   const spec = (type: string) => JSON.parse(JSON.stringify(SPECS[type]!).replaceAll("1234567890", CUSTOMER));
 
-  for (const type of ["DISPLAY", "PERFORMANCE_MAX", "SHOPPING", "DEMAND_GEN", "APP"]) {
+  it("PERFORMANCE_MAX: step 1 creates text assets, step 2 links them, and Google accepts it", async () => {
+    // The old single-request plan is what Google rejected live with NOT_ENOUGH_HEADLINE_ASSET.
+    const first = await mcpTool(draft, "create_campaign_plan", { account_id: CUSTOMER, spec: spec("PERFORMANCE_MAX") });
+    expect(first.isError, JSON.stringify(first.body)).toBe(false);
+    expect(first.body.data.step).toBe("1_of_2_text_assets");
+    expect(first.body.next_action).toMatch(/create_campaign_plan again/);
+    const pre = first.body.data.plan_id;
+    expect((await mcpTool(draft, "validate_change_plan", { plan_id: pre })).body.status).toBe("ready");
+    expect((await mcpTool(apply, "execute_authorised_plan", { plan_id: pre })).body.status).toBe("succeeded");
+    expect([...fake.resources.values()].some((x) => x.advertisingChannelType)).toBe(false); // no campaign yet
+
+    const second = await mcpTool(draft, "create_campaign_plan", { account_id: CUSTOMER, spec: spec("PERFORMANCE_MAX") });
+    expect(second.body.data.step).toBeUndefined();
+    const { plan_id } = second.body.data;
+    expect((await mcpTool(draft, "validate_change_plan", { plan_id })).body.status, "Google must accept the campaign request").toBe("ready");
+    const ex = await mcpTool(apply, "execute_authorised_plan", { plan_id });
+    expect(ex.body.status, JSON.stringify(ex.body)).toBe("succeeded");
+    expect([...fake.resources.values()].find((x) => x.advertisingChannelType === "PERFORMANCE_MAX")!.status).toBe("PAUSED");
+  });
+
+  it("PERFORMANCE_MAX: an invalid spec is refused before any text asset is drafted", async () => {
+    const r = await mcpTool(draft, "create_campaign_plan", { account_id: CUSTOMER, spec: { ...spec("PERFORMANCE_MAX"), logos: [] } });
+    expect(r.body.errors[0].code).toBe("missing_assets");
+  });
+
+  for (const type of ["DISPLAY", "SHOPPING", "DEMAND_GEN", "APP"]) {
     it(`${type}: draft, validate, execute, paused`, async () => {
       const r = await mcpTool(draft, "create_campaign_plan", { account_id: CUSTOMER, spec: spec(type) });
       expect(r.isError, JSON.stringify(r.body)).toBe(false);

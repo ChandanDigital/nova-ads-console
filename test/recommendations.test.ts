@@ -20,7 +20,8 @@ describe("apply and dismiss Google recommendations", () => {
     draft = await issueToken(s, ["read", "draft"]);
     apply = await issueToken(s, ["read", "draft", "apply"]);
     fake.seed(rn("kw1"), { type: "KEYWORD", dismissed: false, campaign: `customers/${CUSTOMER}/campaigns/11` });
-    fake.seed(rn("kw2"), { type: "RESPONSIVE_SEARCH_AD", dismissed: false, campaign: `customers/${CUSTOMER}/campaigns/11` });
+    fake.seed(rn("kw2"), { type: "KEYWORD", dismissed: false, campaign: `customers/${CUSTOMER}/campaigns/12` });
+    fake.seed(rn("rsa"), { type: "RESPONSIVE_SEARCH_AD", dismissed: false, campaign: `customers/${CUSTOMER}/campaigns/11` });
     fake.seed(rn("bud"), { type: "CAMPAIGN_BUDGET", dismissed: false, campaign: `customers/${CUSTOMER}/campaigns/11` });
   });
   afterEach(() => fake.restore());
@@ -56,6 +57,13 @@ describe("apply and dismiss Google recommendations", () => {
     const ex = await mcpTool(apply, "execute_authorised_plan", { plan_id });
     expect(ex.body.status).toBe("succeeded");
     expect(fake.resources.get(rn("kw1"))!.dismissed).toBe(true);
+  });
+
+  it("mixed recommendation types are refused at draft, before Google can reject them", async () => {
+    const r = await mcpTool(draft, "create_recommendation_plan", { account_id: CUSTOMER, action: "apply", recommendations: ["kw1", "rsa"], reason: "Apply both suggestions" });
+    expect(r.isError).toBe(true);
+    expect(r.body.errors[0].code).toBe("mixed_recommendation_types");
+    expect(fake.callsTo("recommendations:apply").length).toBe(0);
   });
 
   it("budget recommendations are refused and point to the budget plan", async () => {

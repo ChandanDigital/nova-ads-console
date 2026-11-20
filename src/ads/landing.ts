@@ -51,7 +51,10 @@ export interface LandingReport {
   not_checked: string[];
 }
 
-export const inspectLandingPage = async (rawUrl: string): Promise<LandingReport> => {
+export const inspectLandingPage = async (rawUrl: string): Promise<LandingReport> => (await readLandingPage(rawUrl)).report;
+
+/** Same single fetch, plus the HTML read (at most MAX_BYTES) for callers such as the tracking audit. */
+export const readLandingPage = async (rawUrl: string): Promise<{ report: LandingReport; html: string }> => {
   let url = checkPublicUrl(rawUrl);
   const redirects: LandingReport["redirects"] = [];
   const started = Date.now();
@@ -125,5 +128,5 @@ export const inspectLandingPage = async (rawUrl: string): Promise<LandingReport>
   add("viewport", report.viewport, "Mobile viewport tag present.", "No mobile viewport meta tag: the page may not be mobile friendly.");
   add("indexable", !/noindex/i.test(robots ?? ""), "Not marked noindex.", "The page is marked noindex.");
   add("contact_path", report.forms > 0 || report.tel_links > 0, "Has a form or a tel: link.", "No form or tel: link found. If this is a lead page, check how visitors contact you.");
-  return report;
+  return { report, html };
 };

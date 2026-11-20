@@ -42,7 +42,21 @@ export type AssetCampaignSpec = z.infer<typeof AssetCampaignSpecSchema>;
 
 const units = (s: string): number => [...s].reduce((n, ch) => n + (/[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹯＀-｠￠-￦]/.test(ch) ? 2 : 1), 0);
 
-export const assetCampaignOperations = (spec: AssetCampaignSpec, account: PlanAccount, planTag: string): PlanOperation[] => {
+/** PMax headlines and descriptions: Google counts them only when the text assets exist before the campaign request. */
+export const pmaxRepeatedTexts = (spec: AssetCampaignSpec): string[] => [...new Set([...spec.headlines, ...spec.descriptions])];
+
+/** Step 1 of a Performance Max launch: create the missing headline/description text assets on their own. They never serve or spend alone. */
+export const textAssetOperations = (texts: string[], account: PlanAccount): PlanOperation[] =>
+  texts.map((text, i) => PlanOperationSchema.parse({
+    id: `text${i}`, kind: "asset", action: "create",
+    payload: { resourceName: `customers/${account.customer_id}/assets/${-100 - i}`, textAsset: { text } },
+    reason: "Performance Max needs its headline and description assets to exist before the campaign request (Google rule).",
+    spending_effect: "None. A text asset does not serve or spend until a campaign uses it.",
+    recovery: "Not needed. Unused text assets have no effect.",
+  }));
+
+/** `existingText` maps PMax headline/description text to an existing asset resource name (see pmaxRepeatedTexts). */
+export const assetCampaignOperations = (spec: AssetCampaignSpec, account: PlanAccount, planTag: string, existingText: Map<string, string> = new Map()): PlanOperation[] => {
   const type = spec.campaign_type;
   const cid = account.customer_id;
   const base = `customers/${cid}`;
@@ -103,6 +117,7 @@ export const assetCampaignOperations = (spec: AssetCampaignSpec, account: PlanAc
       throw new NovaError("missing_assets", "Performance Max (non-retail) needs 3 headlines, 2 descriptions, a long headline, business name, final URL, a landscape image, a square image and a logo.", 400);
     }
     if (units(spec.long_headline) > 90 || units(spec.business_name) > 25) throw new NovaError("invalid_creative", "Long headline (90) or business name (25) exceeds its limit.", 400);
+    if (!spec.descriptions.some((d) => units(d) <= 60)) throw new NovaError("invalid_creative", "Performance Max needs at least one description of 60 text units or fewer (Google: SHORT_DESCRIPTION_REQUIRED).", 400);
     const groupRn = `${base}/assetGroups/-3`;
     add("assetgroup", "asset_group", { resourceName: groupRn, campaign: campaignRn, name: `${name} assets`, finalUrls: [finalUrl], status: "ENABLED" }, ["campaign"]);
     const textAsset = (id: string, text: string, field: string, campaignLevel = false) => {
@@ -111,8 +126,14 @@ export const assetCampaignOperations = (spec: AssetCampaignSpec, account: PlanAc
       if (campaignLevel) add(`${id}link`, "campaign_asset", { campaign: campaignRn, asset: rn, fieldType: field }, ["campaign", id]);
       else add(`${id}link`, "asset_group_asset", { assetGroup: groupRn, asset: rn, fieldType: field }, ["assetgroup", id]);
     };
-    spec.headlines.forEach((t, i) => textAsset(`headline${i}`, t, "HEADLINE"));
-    spec.descriptions.forEach((t, i) => textAsset(`description${i}`, t, "DESCRIPTION"));
+    const linkExisting = (id: string, text: string, field: string) => {
+      const rn = existingText.get(text);
+      if (!rn) throw new NovaError("text_assets_first", "Performance Max headlines and descriptions must exist as assets before the campaign request.", 409);
+      resourceValid(rn, cid, "asset");
+      add(id, "asset_group_asset", { assetGroup: groupRn, asset: rn, fieldType: field }, ["assetgroup"]);
+    };
+    spec.headlines.forEach((t, i) => linkExisting(`headline${i}`, t, "HEADLINE"));
+    spec.descriptions.forEach((t, i) => linkExisting(`description${i}`, t, "DESCRIPTION"));
     textAsset("longheadline", spec.long_headline, "LONG_HEADLINE");
     textAsset("businessname", spec.business_name, "BUSINESS_NAME", true);
     const existing: [string, string[]][] = [["MARKETING_IMAGE", spec.marketing_images], ["SQUARE_MARKETING_IMAGE", spec.square_images], ["LOGO", spec.logos], ["YOUTUBE_VIDEO", spec.videos]];
