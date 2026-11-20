@@ -252,15 +252,13 @@ export const reconcilePlan = async (ctx: Ctx, p: Principal, id: string) => {
   }
   const prior = ex.results_json ? (JSON.parse(ex.results_json) as { resource_name: string | null }[]) : [];
   let resources: (string | null)[] = plan.operations.map((_, i) => prior[i]?.resource_name ?? null);
-  if (!prior.length) {
-    // The response was lost. Find creations by their unique plan tag in the name.
-    const tag = plan.id.slice(0, 8);
-    const ads = adsFor(ctx, account);
-    for (const kind of ["campaign", "campaign_budget"]) {
-      const r = await ads.search(account.customer_id, `SELECT ${kind}.resource_name, ${kind}.name FROM ${kind} WHERE ${kind}.name LIKE ${gaqlContains(`[Nova ${tag}]`)} LIMIT 5`, 5);
-      const idx = plan.operations.findIndex((o) => o.kind === kind && o.action === "create");
-      if (idx >= 0 && r.rows.length === 1) resources[idx] = r.rows[0]![snakeToCamel(kind)]?.resourceName ?? null;
-    }
+  // The response was lost (or an earlier reconcile saved only empty results): find creations by their unique plan tag in the name.
+  const tag = plan.id.slice(0, 8);
+  for (const kind of ["campaign", "campaign_budget"]) {
+    const idx = plan.operations.findIndex((o) => o.kind === kind && o.action === "create");
+    if (idx < 0 || resources[idx]) continue;
+    const r = await adsFor(ctx, account).search(account.customer_id, `SELECT ${kind}.resource_name, ${kind}.name FROM ${kind} WHERE ${kind}.name LIKE ${gaqlContains(`[Nova ${tag}]`)} LIMIT 5`, 5);
+    if (r.rows.length === 1) resources[idx] = r.rows[0]![snakeToCamel(kind)]?.resourceName ?? null;
   }
   const results = await verify(ctx, account, plan, resources);
   const status = overall(results);
