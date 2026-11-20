@@ -329,6 +329,18 @@ describe("failure handling", () => {
     expect(byOp.campaign.status).toBe("succeeded");
     expect(r.body.data.status).toBe("outcome_unknown"); // children could not be located, so the plan is not claimed as complete
   });
+  it("a later reconcile still finds the campaign after an earlier one saved only empty results (seen live)", async () => {
+    const p = await readyPlan();
+    fake.mutateFailure = "timeout";
+    await mcpTool(apply, "execute_authorised_plan", { plan_id: p.plan_id });
+    fake.mutateFailure = null;
+    const first = await mcpTool(draft, "reconcile_operation", { plan_id: p.plan_id }); // nothing visible yet: saves all-null results
+    expect(first.body.data.results.every((x: any) => x.resource_name === null)).toBe(true);
+    fake.seed(`customers/${CUSTOMER}/campaigns/9001`, { name: `Clinic Search [Nova ${p.plan_id.slice(0, 8)}]`, status: "PAUSED" });
+    const r = await mcpTool(draft, "reconcile_operation", { plan_id: p.plan_id });
+    const campaign = r.body.data.results.find((x: any) => x.operation_id === "campaign");
+    expect(campaign).toMatchObject({ resource_name: `customers/${CUSTOMER}/campaigns/9001`, status: "succeeded" });
+  });
   it("Google validation errors are reported with their field path and stop the plan from running", async () => {
     const p = await newCampaignPlan();
     fake.validateFailure = { status: 400, body: { error: { code: 400, message: "bad", details: [{ requestId: "r-9", errors: [{ errorCode: { campaignError: "DUPLICATE_CAMPAIGN_NAME" }, message: "dup", location: { fieldPathElements: [{ fieldName: "mutate_operations", index: 1 }, { fieldName: "campaign_operation" }] } }] }] } } };
